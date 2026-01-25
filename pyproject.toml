@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Demetrius Albuquerque", email = "demetrius.da.costa.albuquerque@yahoo.com.br"}
+    {name = "Demetrius Albuquerque", email = "demetrius.albuquerque@yahoo.com.br"}
 ]
 keywords = [
     "dagster", 
@@ -54,9 +54,9 @@ dev = ["pytest>=7.4.0", "pytest-asyncio>=0.21.0", "black>=23.0.0", "ruff>=0.0.28
 all = ["dagster-authkit[sqlite,ldap,oauth]"]
 
 [project.urls]
-Homepage = "https://github.com/demetrius-mp/dagster-authkit"
-Repository = "https://github.com/demetrius-mp/dagster-authkit"
-Issues = "https://github.com/demetrius-mp/dagster-authkit/issues"
+Homepage = "https://github.com/maltzsama/dagster-authkit"
+Repository = "https://github.com/maltzsama/dagster-authkit"
+Issues = "https://github.com/maltzsama/dagster-authkit/issues"
 
 [project.scripts]
 dagster-authkit = "dagster_authkit.entrypoint:main"
