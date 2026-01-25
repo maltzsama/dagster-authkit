@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dagster-authkit"
+version = "0.2.0"
+description = "Community Auth System for self-hosted Dagster OSS - simple RBAC, Audit-log, and Session Management"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Demetrius Albuquerque", email = "demetrius.da.costa.albuquerque@yahoo.com.br"}
+]
+keywords = [
+    "dagster", 
+    "authentication", 
+    "authorization", 
+    "rbac", 
+    "security", 
+    "audit-logging",
+    "self-hosted",
+    "community",
+    "oss"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+    "dagster>=1.10.0,<2.0.0",
+    "dagster-webserver>=1.10.0,<2.0.0",
+    "starlette>=0.27.0",
+    "itsdangerous>=2.1.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+sqlite = ["bcrypt>=4.0.0"]
+ldap = ["ldap3>=2.9.0"]
+oauth = ["authlib>=1.2.0", "httpx>=0.24.0"]
+dev = ["pytest>=7.4.0", "pytest-asyncio>=0.21.0", "black>=23.0.0", "ruff>=0.0.280"]
+all = ["dagster-authkit[sqlite,ldap,oauth]"]
+
+[project.urls]
+Homepage = "https://github.com/demetrius-mp/dagster-authkit"
+Repository = "https://github.com/demetrius-mp/dagster-authkit"
+Issues = "https://github.com/demetrius-mp/dagster-authkit/issues"
+
+[project.scripts]
+dagster-authkit = "dagster_authkit.entrypoint:main"
+
+[project.entry-points."dagster_auth.backends"]
+dummy = "dagster_authkit.backends.dummy:DummyAuthBackend"
+sqlite = "dagster_authkit.backends.sqlite:SQLiteAuthBackend"
+ldap = "dagster_authkit.backends.ldap:LDAPAuthBackend"
+oauth = "dagster_authkit.backends.oauth:OAuthBackend"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dagster_authkit*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
