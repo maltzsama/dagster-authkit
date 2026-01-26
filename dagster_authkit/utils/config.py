@@ -22,7 +22,7 @@ class AuthConfig:
         self.AUTH_BACKEND = os.getenv("DAGSTER_AUTH_BACKEND", "dummy").lower()
 
         # SQLite database path
-        self.DAGSTER_AUTH_DB = os.getenv("DAGSTER_AUTH_DB", "./tmp/dagster_auth.db")
+        self.DAGSTER_AUTH_DB = os.getenv("DAGSTER_AUTH_DB", "./dagster_auth.db")
 
         # Rate limiting
         self.RATE_LIMIT_ENABLED = os.getenv("DAGSTER_AUTH_RATE_LIMIT", "true").lower() == "true"

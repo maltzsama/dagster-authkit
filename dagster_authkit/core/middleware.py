@@ -41,24 +41,66 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
     WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
     # GraphQL mutation → required role mapping
+    # GraphQL mutation → required role mapping
     MUTATION_ROLE_MAP = {
-        # LAUNCHER (20) - Execution operations
+        # ===== LAUNCHER (20) - Execution Operations =====
         "launchRun": Role.LAUNCHER,
+        "launchPipelineExecution": Role.LAUNCHER,
+        "launchRunReexecution": Role.LAUNCHER,
+        "launchPipelineReexecution": Role.LAUNCHER,
         "terminateRun": Role.LAUNCHER,
-        "reexecuteRun": Role.LAUNCHER,
-        "cancelRun": Role.LAUNCHER,
+        "terminatePipelineExecution": Role.LAUNCHER,
+        "terminateRuns": Role.LAUNCHER,
+        "deleteRun": Role.LAUNCHER,
         "deletePipelineRun": Role.LAUNCHER,
-        # EDITOR (30) - Configuration operations
+
+        # ===== EDITOR (30) - Configuration & Management =====
+        # Schedules
         "startSchedule": Role.EDITOR,
         "stopRunningSchedule": Role.EDITOR,
+        "resetSchedule": Role.EDITOR,
+        "scheduleDryRun": Role.EDITOR,
+
+        # Sensors
         "startSensor": Role.EDITOR,
         "stopSensor": Role.EDITOR,
+        "resetSensor": Role.EDITOR,
+        "setSensorCursor": Role.EDITOR,
+        "sensorDryRun": Role.EDITOR,
+
+        # Assets
         "wipeAssets": Role.EDITOR,
-        "materializeAssets": Role.EDITOR,
+        "reportRunlessAssetEvents": Role.EDITOR,
+        "setAutoMaterializePaused": Role.EDITOR,
+
+        # Backfills
         "launchPartitionBackfill": Role.EDITOR,
-        # ADMIN (40) - Dangerous operations
+        "launchBackfill": Role.EDITOR,
+        "cancelPartitionBackfill": Role.EDITOR,
+        "resumePartitionBackfill": Role.EDITOR,
+        "reexecutePartitionBackfill": Role.EDITOR,
+
+        # Partitions
+        "addDynamicPartition": Role.EDITOR,
+        "deleteDynamicPartitions": Role.EDITOR,
+
+        # Multiple runs
+        "launchMultipleRuns": Role.EDITOR,
+
+        # Concurrency
+        "setConcurrencyLimit": Role.EDITOR,
+        "deleteConcurrencyLimit": Role.EDITOR,
+        "freeConcurrencySlotsForRun": Role.EDITOR,
+        "freeConcurrencySlots": Role.EDITOR,
+
+        # ===== ADMIN (40) - System Operations =====
         "reloadRepositoryLocation": Role.ADMIN,
+        "reloadWorkspace": Role.ADMIN,
         "shutdownRepositoryLocation": Role.ADMIN,
+
+        # ===== NO CHECK (Analytics/UI state) =====
+        # "logTelemetry"
+        # "setNuxSeen"
     }
 
     async def dispatch(self, request: Request, call_next):
