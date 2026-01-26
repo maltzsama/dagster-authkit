@@ -153,16 +153,19 @@ class PeeweeAuthBackend(AuthBackend):
             return True
         return False
 
-    def change_password(
-        self, username: str, new_password: str, performed_by: str = "system"
-    ) -> bool:
-        """Updates password and revokes all sessions to force re-authentication."""
-        pw_hash = SecurityHardening.hash_password(new_password)
-        query = UserTable.update(password_hash=pw_hash).where(UserTable.username == username)
+    def change_password(self, username: str, new_password: str, performed_by: str = "system") -> bool:
+        """
+        Updates password hash and revokes all active sessions for THIS user.
+        """
+        query = UserTable.update(
+            password_hash=SecurityHardening.hash_password(new_password)
+        ).where(UserTable.username == username)
 
         if query.execute() > 0:
-            # Global Revocation - Production Requirement
+            # O "Doom" aqui é só no CPF do cara, não na firma toda.
+            from dagster_authkit.auth.session import sessions
             sessions.revoke_all(username)
+
             log_audit_event("PASSWORD_CHANGED", performed_by, target=username)
             return True
         return False
