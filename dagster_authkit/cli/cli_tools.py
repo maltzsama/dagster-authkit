@@ -49,7 +49,14 @@ def init_db_command(args):
 
     print(f"✅ Database initialized: {db_path}")
 
-    # Offer to create admin user
+    # Offer to create admin user ONLY if bootstrap didn't create one
+    admin_exists = backend.get_user("admin") is not None
+
+    if admin_exists:
+        print("\n✅ Admin user already created via DAGSTER_AUTH_ADMIN_PASSWORD")
+        return 0
+
+    # No admin yet, offer to create manually
     if args.with_admin or input("\nCreate admin user? (y/N): ").lower() == "y":
         print("\nCreating admin user...")
         username = input("Username [admin]: ").strip() or "admin"
@@ -64,7 +71,11 @@ def init_db_command(args):
         full_name = input("Full name (optional): ").strip() or "Administrator"
 
         if backend.add_user(
-            username=username, password=password, role=Role.ADMIN, email=email, full_name=full_name
+                username=username,
+                password=password,
+                role=Role.ADMIN,
+                email=email,
+                full_name=full_name
         ):
             print(f"✅ Admin user '{username}' created successfully")
             print(f"   Role: ADMIN")

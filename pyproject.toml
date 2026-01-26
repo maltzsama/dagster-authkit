@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dagster-authkit"
 version = "0.1.0"
-description = "Community Auth System for self-hosted Dagster OSS - simple RBAC, Audit-log, and Session Management"
+description = "Community Auth System for self-hosted Dagster OSS - RBAC, Audit Logging, and Session Management"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
@@ -13,11 +13,11 @@ authors = [
     {name = "Demetrius Albuquerque", email = "demetrius.albuquerque@yahoo.com.br"}
 ]
 keywords = [
-    "dagster", 
-    "authentication", 
-    "authorization", 
-    "rbac", 
-    "security", 
+    "dagster",
+    "authentication",
+    "authorization",
+    "rbac",
+    "security",
     "audit-logging",
     "self-hosted",
     "community",
@@ -42,7 +42,7 @@ dependencies = [
     "dagster>=1.10.0,<2.0.0",
     "dagster-webserver>=1.10.0,<2.0.0",
     "starlette>=0.27.0",
-    "itsdangerous>=2.2.0",
+    "itsdangerous>=2.1.0",
     "python-multipart>=0.0.6",
 ]
 
@@ -59,13 +59,11 @@ Repository = "https://github.com/maltzsama/dagster-authkit"
 Issues = "https://github.com/maltzsama/dagster-authkit/issues"
 
 [project.scripts]
-dagster-authkit = "dagster_authkit.entrypoint:main"
+dagster-authkit = "dagster_authkit.cli.main:main"
 
 [project.entry-points."dagster_auth.backends"]
-dummy = "dagster_authkit.backends.dummy:DummyAuthBackend"
-sqlite = "dagster_authkit.backends.sqlite:SQLiteAuthBackend"
-ldap = "dagster_authkit.backends.ldap:LDAPAuthBackend"
-oauth = "dagster_authkit.backends.oauth:OAuthBackend"
+dummy = "dagster_authkit.auth.backends.dummy:DummyAuthBackend"
+sqlite = "dagster_authkit.auth.backends.sqlite:SQLiteAuthBackend"
 
 [tool.setuptools.packages.find]
 where = ["."]

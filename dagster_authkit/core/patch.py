@@ -115,8 +115,8 @@ def _inject_ui_logic(self, request: Request):
 
         /* ===== AVATAR CIRCLE ===== */
         .authkit-avatar-circle {{
-            width: 32px;
-            height: 32px;
+            width: 18px;
+            height: 18px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 50%;
             display: flex;
@@ -124,29 +124,19 @@ def _inject_ui_logic(self, request: Request):
             justify-content: center;
             font-weight: 600;
             color: white;
-            font-size: 14px;
+            font-size: 8px;
             flex-shrink: 0;
-            transition: all 0.2s;
         }}
 
-        /* ===== USER LABEL (hidden when collapsed) ===== */
+        /* ===== USER LABEL ===== */
         .authkit-label {{
             flex: 1;
+            min-width: 0;
             text-align: left;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 14px;
-            transition: opacity 0.2s, width 0.2s;
-        }}
-
-        /* When sidebar is collapsed (detected by parent width) */
-        @media (max-width: 80px) {{
-            .authkit-label {{
-                opacity: 0;
-                width: 0;
-                overflow: hidden;
-            }}
+            font-size: 13px;
         }}
 
         /* ===== POPOVER ===== */
@@ -161,16 +151,10 @@ def _inject_ui_logic(self, request: Request):
             border: 1px solid rgba(255, 255, 255, 0.15);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             z-index: 10000;
-            transition: all 0.2s;
         }}
 
         .authkit-popover.active {{
             display: block;
-        }}
-
-        /* Popover positioning when sidebar is collapsed */
-        .sidebar-collapsed .authkit-popover {{
-            left: 60px;
         }}
 
         .authkit-header {{
@@ -207,7 +191,7 @@ def _inject_ui_logic(self, request: Request):
             align-items: center;
             gap: 8px;
             padding: 8px 12px;
-            transition: all 0.2s;
+            min-width: 0;
         }}
 
         /* Hover effect */
@@ -220,23 +204,20 @@ def _inject_ui_logic(self, request: Request):
     <script>
         (function() {{
             const u = {user_data_json};
-            
+
             function infiltrate() {{
                 const groups = document.querySelectorAll('div[class*="MainNavigation_group"]');
                 if (groups.length === 0) return;
-                
+
                 const targetGroup = groups[groups.length - 1];
                 if (!targetGroup || document.getElementById('authkit-nav-item')) return;
 
-                // Create menu container
                 const itemContainer = document.createElement('div');
                 itemContainer.id = 'authkit-nav-item';
-                
-                // Clone classes from sibling for consistency
+
                 const sibling = targetGroup.querySelector('div[class*="itemContainer"]');
                 if (sibling) itemContainer.className = sibling.className;
 
-                // Build HTML (using string concatenation to avoid template literal issues)
                 itemContainer.innerHTML = 
                     '<button id="authkit-trigger">' +
                         '<div class="authkit-box-proxy">' +
@@ -253,16 +234,13 @@ def _inject_ui_logic(self, request: Request):
                         '<a href="/auth/logout" class="authkit-item" style="color:#ff6b6b;">Sign Out</a>' +
                     '</div>';
 
-                // Insert at top of group
                 targetGroup.prepend(itemContainer);
 
-                // Clone styles from Settings button
                 const settingsBtn = targetGroup.querySelector('button[class*="itemButton"]');
                 if (settingsBtn) {{
                     const trigger = document.getElementById('authkit-trigger');
                     trigger.className = settingsBtn.className;
-                    
-                    // Copy internal box classes for perfect alignment
+
                     const boxProxy = itemContainer.querySelector('.authkit-box-proxy');
                     const originalBox = settingsBtn.querySelector('div[class*="Box_"]');
                     if (originalBox) {{
@@ -270,42 +248,34 @@ def _inject_ui_logic(self, request: Request):
                     }}
                 }}
 
-                // Event handlers
                 setupEventHandlers();
-                
-                // Detect sidebar collapse/expand
-                watchSidebarState();
             }}
 
             function setupEventHandlers() {{
                 const trigger = document.getElementById('authkit-trigger');
                 const popover = document.getElementById('authkit-popover');
-                
+
                 if (!trigger || !popover) return;
 
-                // Toggle popover
                 trigger.addEventListener('click', (e) => {{
                     e.stopPropagation();
                     e.preventDefault();
                     popover.classList.toggle('active');
                 }});
-                
-                // Close on outside click
+
                 document.addEventListener('click', (e) => {{
                     const container = document.getElementById('authkit-nav-item');
                     if (popover && container && !container.contains(e.target)) {{
                         popover.classList.remove('active');
                     }}
                 }});
-                
-                // Close on Escape
+
                 document.addEventListener('keydown', (e) => {{
                     if (e.key === 'Escape' && popover) {{
                         popover.classList.remove('active');
                     }}
                 }});
-                
-                // Close on logout click
+
                 popover.querySelectorAll('a').forEach(link => {{
                     link.addEventListener('click', () => {{
                         popover.classList.remove('active');
@@ -313,43 +283,15 @@ def _inject_ui_logic(self, request: Request):
                 }});
             }}
 
-            function watchSidebarState() {{
-                // Watch for sidebar collapse/expand
-                const sidebar = document.querySelector('[class*="LeftNav_"]');
-                if (!sidebar) return;
-
-                const observer = new ResizeObserver(entries => {{
-                    for (let entry of entries) {{
-                        const width = entry.contentRect.width;
-                        const popover = document.getElementById('authkit-popover');
-                        
-                        if (popover) {{
-                            if (width < 100) {{
-                                // Collapsed - adjust popover position
-                                popover.classList.add('sidebar-collapsed');
-                            }} else {{
-                                // Expanded
-                                popover.classList.remove('sidebar-collapsed');
-                            }}
-                        }}
-                    }}
-                }});
-
-                observer.observe(sidebar);
-            }}
-
-            // Initialize
             if (document.readyState === 'loading') {{
                 document.addEventListener('DOMContentLoaded', infiltrate);
             }} else {{
                 infiltrate();
             }}
-            
-            // Watch for DOM changes (sidebar might load later)
+
             const observer = new MutationObserver(infiltrate);
             observer.observe(document.body, {{ childList: true, subtree: true }});
-            
-            // Fallback: retry after delay
+
             setTimeout(infiltrate, 500);
         }})();
     </script>
