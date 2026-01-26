@@ -108,27 +108,29 @@ def _inject_ui_logic(self, request: Request):
 
     injection = rf"""
     <style>
-        /* ===== USER MENU CONTAINER ===== */
+        /* Injetando a tipografia oficial Geist Sans */
+        @import url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/style.css');
+
         #authkit-nav-item {{
             position: relative;
         }}
 
-        /* ===== AVATAR CIRCLE ===== */
+        /* Estilização do Avatar usando os tokens da Master Branch */
         .authkit-avatar-circle {{
-            width: 16px;
-            height: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 50%;
+            width: 18px; /* Ajustado para bater com o padrão do Dagster */
+            height: 18px;
+            background: #234AD1; /* Azul oficial do Dagster */
+            border-radius: 4px; /* O Dagster usa 4px nos ícones de UI */
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 600;
+            font-weight: 700;
             color: white;
-            font-size: 8px;
-            flex-shrink: 0;
+            font-size: 10px;
+            flex-shrink: 0; /* O herói que impede de 'espremer' */
+            font-family: "Geist Sans", sans-serif;
         }}
 
-        /* ===== USER LABEL ===== */
         .authkit-label {{
             flex: 1;
             min-width: 0;
@@ -137,46 +139,59 @@ def _inject_ui_logic(self, request: Request):
             text-overflow: ellipsis;
             white-space: nowrap;
             font-size: 14px;
+            font-family: "Geist Sans", sans-serif;
         }}
 
-        /* ===== POPOVER ===== */
+        /* Popover seguindo o BlueprintJS/Dagster Style */
         .authkit-popover {{
             display: none;
             position: fixed;
             bottom: 65px;
             left: 12px;
-            width: 250px;
-            background: #1a1d29;
+            width: 240px;
+            background: #ffffff; /* Tema Light como base */
             border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 1px solid #D1D5DB;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
             z-index: 10000;
+            font-family: "Geist Sans", sans-serif;
         }}
 
-        .authkit-popover.active {{
-            display: block;
+        /* Suporte a Dark Mode via CSS Variables oficiais */
+        @media (prefers-color-scheme: dark) {{
+            .authkit-popover {{
+                background: #1a1d29;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            }}
         }}
+
+        .authkit-popover.active {{ display: block; }}
 
         .authkit-header {{
             padding: 12px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }}
+
+        @media (prefers-color-scheme: dark) {{
+            .authkit-header {{ border-bottom: 1px solid rgba(255, 255, 255, 0.1); }}
         }}
 
         .authkit-item {{
             padding: 10px 16px;
             display: block;
-            color: #ccc;
+            color: #ef4444; /* Vermelho para Logout */
             text-decoration: none;
             font-size: 14px;
+            font-weight: 500;
             transition: background-color 0.2s;
             cursor: pointer;
         }}
 
         .authkit-item:hover {{
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: rgba(239, 68, 68, 0.05);
         }}
 
-        /* ===== TRIGGER BUTTON ===== */
         #authkit-trigger {{
             background: transparent;
             border: none;
@@ -189,15 +204,9 @@ def _inject_ui_logic(self, request: Request):
         .authkit-box-proxy {{
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
             padding: 8px 12px;
             min-width: 0;
-        }}
-
-        /* Hover effect */
-        #authkit-trigger:hover .authkit-box-proxy {{
-            background-color: rgba(255, 255, 255, 0.05);
-            border-radius: 6px;
         }}
     </style>
 
@@ -227,15 +236,16 @@ def _inject_ui_logic(self, request: Request):
                     '</button>' +
                     '<div class="authkit-popover" id="authkit-popover">' +
                         '<div class="authkit-header">' +
-                            '<div style="font-weight: 600; color: white;">' + u.full_name + '</div>' +
-                            '<div style="font-size: 11px; color: #667eea; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">' + u.role + '</div>' +
+                            '<div style="font-weight: 600; color: var(--color-text-default, white);">' + u.full_name + '</div>' +
+                            '<div style="font-size: 11px; color: #234AD1; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-top: 2px;">' + u.role + '</div>' +
                             (u.has_email ? '<div style="font-size: 12px; color: #888; margin-top: 4px;">' + u.email + '</div>' : '') +
                         '</div>' +
-                        '<a href="/auth/logout" class="authkit-item" style="color:#ff6b6b;">Sign Out</a>' +
+                        '<a href="/auth/logout" class="authkit-item">Sign Out</a>' +
                     '</div>';
 
                 targetGroup.prepend(itemContainer);
 
+                // CLONAGEM DE CLASSES (O seu segredo para o colapso funcionar)
                 const settingsBtn = targetGroup.querySelector('button[class*="itemButton"]');
                 if (settingsBtn) {{
                     const trigger = document.getElementById('authkit-trigger');
@@ -244,6 +254,7 @@ def _inject_ui_logic(self, request: Request):
                     const boxProxy = itemContainer.querySelector('.authkit-box-proxy');
                     const originalBox = settingsBtn.querySelector('div[class*="Box_"]');
                     if (originalBox) {{
+                        // Herdando o Box nativo para ganhar o comportamento de colapso do Dagster
                         boxProxy.className = originalBox.className + ' authkit-box-proxy';
                     }}
                 }}
@@ -257,11 +268,11 @@ def _inject_ui_logic(self, request: Request):
 
                 if (!trigger || !popover) return;
 
-                trigger.addEventListener('click', (e) => {{
+                trigger.onclick = (e) => {{
                     e.stopPropagation();
                     e.preventDefault();
                     popover.classList.toggle('active');
-                }});
+                }};
 
                 document.addEventListener('click', (e) => {{
                     const container = document.getElementById('authkit-nav-item');
@@ -275,24 +286,11 @@ def _inject_ui_logic(self, request: Request):
                         popover.classList.remove('active');
                     }}
                 }});
-
-                popover.querySelectorAll('a').forEach(link => {{
-                    link.addEventListener('click', () => {{
-                        popover.classList.remove('active');
-                    }});
-                }});
-            }}
-
-            if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', infiltrate);
-            }} else {{
-                infiltrate();
             }}
 
             const observer = new MutationObserver(infiltrate);
             observer.observe(document.body, {{ childList: true, subtree: true }});
-
-            setTimeout(infiltrate, 500);
+            infiltrate();
         }})();
     </script>
     """

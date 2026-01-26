@@ -45,135 +45,194 @@ async def login_page(request: Request) -> Response:
 
     html = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-        <title>Login - Dagster AuthKit</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sign in to Dagster</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/style.css">
         <style>
+            :root {{
+                /* Tokens extraídos do seu lightThemeColors.tsx */
+                --bg-default: #ffffff;
+                --text-default: #1f2937;
+                --text-light: #6b7280;
+                --border-default: #d1d5db;
+                --accent-primary: #234ad1;
+                --accent-primary-hover: #1a39a7;
+                --focus-ring: rgba(35, 74, 209, 0.2);
+                --error-bg: #fef2f2;
+                --error-text: #991b1b;
+            }}
+
+            @media (prefers-color-scheme: dark) {{
+                :root {{
+                    /* Tokens extraídos do seu darkThemeColors.tsx */
+                    --bg-default: #111827;
+                    --text-default: #ffffff;
+                    --text-light: #9ca3af;
+                    --border-default: #374151;
+                    --accent-primary: #3b82f6;
+                    --accent-primary-hover: #60a5fa;
+                    --focus-ring: rgba(59, 130, 246, 0.4);
+                    --error-bg: #450a0a;
+                    --error-text: #fca5a5;
+                }}
+            }}
+
+            * {{ box-sizing: border-box; }}
+
             body {{
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
+                margin: 0;
+                background-color: var(--bg-default);
+                color: var(--text-default);
+                font-family: "Geist Sans", -apple-system, system-ui, sans-serif;
+                -webkit-font-smoothing: antialiased;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                margin: 0;
-                padding: 20px;
+                min-height: 100vh;
             }}
-            .login-box {{
-                background: white;
-                padding: 40px;
-                border-radius: 10px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+
+            .login-card {{
                 width: 100%;
                 max-width: 400px;
+                padding: 40px;
+                border-radius: 8px;
+                /* No Dagster as bordas são sutis e os cards têm sombras leves */
+                border: 1px solid var(--border-default);
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             }}
+
+            .header {{
+                text-align: center;
+                margin-bottom: 32px;
+            }}
+
+            .logo-svg {{
+                width: 48px;
+                height: 48px;
+                margin-bottom: 16px;
+            }}
+
             h1 {{
-                margin: 0 0 10px 0;
-                color: #333;
-                font-size: 28px;
+                font-size: 20px;
+                font-weight: 600;
+                margin: 0;
+                letter-spacing: -0.02em;
             }}
+
             .subtitle {{
-                color: #666;
-                margin-bottom: 30px;
                 font-size: 14px;
+                color: var(--text-light);
+                margin-top: 8px;
             }}
+
             .form-group {{
-                margin-bottom: 20px;
+                margin-bottom: 24px;
             }}
+
             label {{
                 display: block;
-                margin-bottom: 5px;
-                color: #555;
-                font-weight: 500;
-                font-size: 14px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 8px;
+                color: var(--text-light);
             }}
-            input[type="text"],
-            input[type="password"] {{
+
+            /* Estilo TextInput.tsx - Simulação do BlueprintJS */
+            input {{
                 width: 100%;
-                padding: 12px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
+                height: 36px;
+                padding: 0 12px;
                 font-size: 14px;
-                box-sizing: border-box;
+                background: transparent;
+                color: inherit;
+                border: 1px solid var(--border-default);
+                border-radius: 4px;
+                transition: border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
             }}
-            input[type="text"]:focus,
-            input[type="password"]:focus {{
+
+            input:focus {{
                 outline: none;
-                border-color: #667eea;
+                border-color: var(--accent-primary);
+                box-shadow: 0 0 0 3px var(--focus-ring);
             }}
+
+            /* Estilo Button.tsx */
             button {{
                 width: 100%;
-                padding: 12px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
+                height: 40px;
+                background-color: var(--accent-primary);
+                color: #ffffff;
                 border: none;
-                border-radius: 5px;
-                font-size: 16px;
+                border-radius: 4px;
+                font-size: 14px;
                 font-weight: 600;
                 cursor: pointer;
-                transition: transform 0.2s;
+                transition: background-color 0.1s;
             }}
+
             button:hover {{
-                transform: translateY(-1px);
+                background-color: var(--accent-primary-hover);
             }}
-            button:active {{
-                transform: translateY(0);
-            }}
-            .error {{
-                background: #fee;
-                color: #c33;
+
+            .error-message {{
+                background-color: var(--error-bg);
+                color: var(--error-text);
                 padding: 12px;
-                border-radius: 5px;
-                margin-bottom: 20px;
-                font-size: 14px;
-                border-left: 3px solid #c33;
+                border-radius: 4px;
+                font-size: 13px;
+                margin-bottom: 24px;
+                border: 1px solid var(--error-text);
             }}
+
             .footer {{
-                margin-top: 20px;
+                margin-top: 40px;
                 text-align: center;
-                color: #999;
-                font-size: 12px;
+                font-size: 11px;
+                color: var(--text-light);
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
             }}
         </style>
     </head>
     <body>
-        <div class="login-box">
-            <h1>🔐 Dagster Login</h1>
-            <p class="subtitle">Enter your credentials to continue</p>
-            
-            {"<div class='error'>" + error + "</div>" if error else ""}
-            
+        <div class="login-card">
+            <div class="header">
+                <svg class="logo-svg" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="48" height="48" rx="8" fill="#234AD1"/>
+                    <path d="M12 16H20V24H12V16Z" fill="white"/>
+                    <path d="M28 16H36V24H28V16Z" fill="white" fill-opacity="0.7"/>
+                    <path d="M12 28H20V36H12V28Z" fill="white" fill-opacity="0.7"/>
+                    <path d="M28 28H36V36H28V28Z" fill="white" fill-opacity="0.4"/>
+                </svg>
+                <h1>Dagster AuthKit</h1>
+                <p class="subtitle">Please sign in to continue</p>
+            </div>
+
+            {"<div class='error-message'>" + error + "</div>" if error else ""}
+
             <form method="post" action="/auth/process">
                 <input type="hidden" name="next" value="{next_url}">
-                
+
                 <div class="form-group">
                     <label for="username">Username</label>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        required 
-                        autofocus
-                        autocomplete="username"
-                    >
+                    <input type="text" id="username" name="username" required autofocus>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        required
-                        autocomplete="current-password"
-                    >
+                    <input type="password" id="password" name="password" required>
                 </div>
-                
-                <button type="submit">Login</button>
+
+                <button type="submit">Sign In</button>
             </form>
-            
+
             <div class="footer">
-                Powered by <strong>dagster-authkit</strong>
+                Community-driven Security
             </div>
         </div>
     </body>
