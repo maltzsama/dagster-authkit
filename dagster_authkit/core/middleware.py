@@ -1,8 +1,5 @@
 """
 Authentication Middleware - Community RBAC Version
-
-Implements Dagster+ role hierarchy: VIEWER < LAUNCHER < EDITOR < ADMIN.
-Includes GraphQL mutation detection and schema-compliant error responses.
 """
 
 import json
@@ -16,251 +13,131 @@ from starlette.responses import RedirectResponse, Response
 
 from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
 from dagster_authkit.auth.security import SecurityHardening
-from dagster_authkit.auth.session import validate_session
+from dagster_authkit.auth.session import sessions
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
 
 logger = logging.getLogger(__name__)
 
-
 class DagsterAuthMiddleware(BaseHTTPMiddleware):
-    """
-    Authentication and RBAC middleware for Dagster.
-
-    Access Control Rules:
-    1. Public paths (/auth/*) - No authentication required
-    2. GraphQL (/graphql) - Mutation-level RBAC based on operation
-    3. REST endpoints:
-       - Write operations (POST/PUT/DELETE/PATCH) - Requires EDITOR role
-       - Read operations (GET) - Requires VIEWER role (authenticated)
-
-    Role Hierarchy: VIEWER(10) < LAUNCHER(20) < EDITOR(30) < ADMIN(40)
-    """
-
-    # ========================================
-    # Configuration
-    # ========================================
-
-    # Public endpoints (no authentication required)
+    # --- Configuration ---
     PUBLIC_PATHS: frozenset[str] = frozenset({
-        "/auth/login",
-        "/auth/logout",
-        "/auth/process",
-        "/auth/health",
-        "/auth/metrics",
+        "/auth/login", "/auth/logout", "/auth/process", "/auth/health", "/auth/metrics",
     })
 
-    PUBLIC_PREFIXES: tuple[str, ...] = (
-        "/auth/",
-        "/static/",
-    )
+    PUBLIC_PREFIXES: tuple[str, ...] = ("/auth/", "/static/",)
 
-    # Write operations (require EDITOR role for REST)
-    WRITE_METHODS: frozenset[str] = frozenset({
-        "POST",
-        "PUT",
-        "DELETE",
-        "PATCH",
-    })
-
-    # ========================================
-    # Main Dispatch
-    # ========================================
+    WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
 
-        # 1. Public paths - skip authentication
         if self._is_public_path(path):
             response = await call_next(request)
             return SecurityHardening.set_security_headers(response)
 
-        # 2. Require authentication
+        # 1. Validation via v1.0 Manager
         user = self._get_authenticated_user(request)
         if not user:
+            # Better UX: 401 for APIs, 302 for humans
+            if path == "/graphql" or request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return Response(content="Unauthorized", status_code=401)
             return RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
 
-        # 3. GraphQL - mutation-level RBAC
+        # 2. GraphQL Mutation RBAC
         if path == "/graphql" and method == "POST":
             body = await request.body()
             graphql_data = self._parse_json(body)
-            query = graphql_data.get("query", "")
+            queries = graphql_data if isinstance(graphql_data, list) else [graphql_data]
 
-            if self._is_mutation(query):
-                mutation_name = self._extract_graphql_field_name(query)
-                required_role = RolePermissions.get_required_role(mutation_name)
+            for g_item in queries:
+                query_str = g_item.get("query", "")
+                if self._is_mutation(query_str):
+                    mutation_name = self._extract_graphql_field_name(query_str)
+                    required_role = RolePermissions.get_required_role(mutation_name)
 
-                if required_role:
-                    if not user.can(required_role):
-                        logger.warning(
-                            f"RBAC BLOCK: {user.username} (role={user.role.name}) "
-                            f"attempted {mutation_name} (requires {required_role.name})"
-                        )
+                    if required_role and not user.can(required_role):
+                        self._log_denied(user, mutation_name, required_role)
+                        return self._generate_dagster_error_response(user, mutation_name, required_role)
 
-                        log_access_control(
-                            user.username,
-                            "POST",
-                            "/graphql",
-                            False,
-                            roles=[user.role.name],
-                            reason=f"REQUIRES_{required_role.name}",
-                        )
-
-                        return self._generate_dagster_error_response(
-                            user, mutation_name, required_role
-                        )
-                    else:
-                        log_access_control(
-                            user.username,
-                            "POST",
-                            "/graphql",
-                            True,
-                            roles=[user.role.name],
-                            reason=f"MUTATION_{mutation_name}",
-                        )
-
-            # Re-inject body for downstream consumption
-            async def receive():
-                return {"type": "http.request", "body": body}
-
+            async def receive(): return {"type": "http.request", "body": body}
             request = Request(request.scope, receive=receive)
 
-        # 4. REST - simple method-based RBAC
-        else:
-            if method in self.WRITE_METHODS and not user.can(Role.EDITOR):
-                log_access_control(
-                    user.username,
-                    method,
-                    path,
-                    False,
-                    roles=[user.role.name],
-                    reason="REQUIRES_EDITOR",
-                )
-                return self._forbidden_html_response(
-                    user, path, method, "REQUIRES_EDITOR"
-                )
+        # 3. REST RBAC
+        elif method in self.WRITE_METHODS and not user.can(Role.EDITOR):
+            self._log_denied(user, f"REST_{method}_{path}", Role.EDITOR)
+            return self._forbidden_html_response(user, path, method, "REQUIRES_EDITOR")
 
-        # 5. Attach user to request state
         request.state.user = user
-
-        # 6. Continue to Dagster
         response = await call_next(request)
         return SecurityHardening.set_security_headers(response)
 
-    # ========================================
-    # Authentication
-    # ========================================
-
-    def _is_public_path(self, path: str) -> bool:
-        """Check if path requires no authentication."""
-        if path in self.PUBLIC_PATHS:
-            return True
-        return any(path.startswith(prefix) for prefix in self.PUBLIC_PREFIXES)
+    # --- Helper Methods ---
 
     def _get_authenticated_user(self, request: Request) -> Optional[AuthUser]:
-        """
-        Validate session and return AuthUser.
-
-        Returns:
-            AuthUser if authenticated, None otherwise
-        """
         token = request.cookies.get(config.SESSION_COOKIE_NAME)
-        if not token:
-            return None
+        if not token: return None
 
-        user_data = validate_session(token)
-        if not user_data:
-            return None
+        # v1.0 CALL: Using the sessions singleton validate method
+        user_data = sessions.validate(token)
+        if not user_data: return None
 
         try:
             return AuthUser.from_dict(user_data)
         except Exception as e:
-            logger.error(f"Failed to deserialize user from session: {e}")
+            logger.error(f"User deserialization failed: {e}")
             return None
 
-    # ========================================
-    # GraphQL RBAC
-    # ========================================
+    def _is_public_path(self, path: str) -> bool:
+        return path in self.PUBLIC_PATHS or any(path.startswith(p) for p in self.PUBLIC_PREFIXES)
 
-    def _parse_json(self, body: bytes) -> dict:
-        """Parse JSON body safely."""
-        try:
-            return json.loads(body.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return {}
-
-    def _is_mutation(self, query: str) -> bool:
-        """Check if GraphQL query is a mutation."""
+    @staticmethod
+    def _is_mutation(query: str) -> bool:
         return "mutation" in query.lower()[:100]
 
-    def _extract_graphql_field_name(self, query: str) -> str:
-        """
-        Extract mutation name from GraphQL query.
-
-        Examples:
-            mutation { launchRun(...) } → "launchRun"
-            mutation StartRun { launchRun(...) } → "launchRun"
-        """
-        match = re.search(r"mutation[^{]*\{\s*(\w+)", query)
+    @staticmethod
+    def _extract_graphql_field_name(query: str) -> str:
+        """v1.0 Robust Regex: Handles comments, aliases, and formatting."""
+        clean_query = re.sub(r'#.*', '', query)
+        pattern = r"mutation[^{]*\{\s*(?:[\w\d_]+\s*:\s*)?([\w\d_]+)"
+        match = re.search(pattern, clean_query, re.IGNORECASE | re.DOTALL)
         return match.group(1) if match else "unknown"
 
-    def _generate_dagster_error_response(
-        self, user: AuthUser, mutation_name: str, required_role: Role
-    ) -> Response:
-        """
-        Generate Dagster-native error response (PythonError format).
+    @staticmethod
+    def _log_denied(user, action, role):
+        logger.warning(f"RBAC DENIED: {user.username} (role: {user.role.name}) tried {action}")
+        log_access_control(user.username, "POST", "/graphql", False, [user.role.name], f"REQUIRES_{role.name}")
 
-        This ensures the error appears in Dagster UI's native inspector.
-        """
-        msg = (
-            f"Permission Denied: User '{user.username}' (role: {user.role.name}) "
-            f"requires '{required_role.name}' role for operation '{mutation_name}'."
-        )
+    @staticmethod
+    def _parse_json(body: bytes) -> dict:
+        try: return json.loads(body.decode("utf-8"))
+        except: return {}
 
-        response_payload = {
+    @staticmethod
+    def _generate_dagster_error_response(user, mutation, role) -> Response:
+        payload = {
             "data": {
-                mutation_name: {
+                mutation: {
                     "__typename": "PythonError",
-                    "message": f"🔒 Access Denied: {required_role.name} role required",
+                    "message": f"🔒 Access Denied: {role.name} role required",
                     "stack": [
-                        f"Action: {mutation_name}\n",
-                        f"User: {user.username} (current role: {user.role.name})\n",
-                        f"Required role: {required_role.name}\n",
-                        f"\nTo request access, contact your platform engineering team.\n",
+                        f"Action: {mutation}\n",
+                        f"User: {user.username} (role: {user.role.name})\n",
+                        f"Required: {role.name}\n",
                     ],
                     "cls_name": "AccessControlError",
-                    "cause": None,
-                    "context": None,
                 }
             },
-            "errors": [
-                {
-                    "message": f"Access Denied: {required_role.name} role required",  # ← Mais específico
-                    "path": [mutation_name],
-                    "extensions": {
-                        "code": "FORBIDDEN",
-                        "requiredRole": required_role.name,  # ← Extra metadata útil
-                        "userRole": user.role.name,
-                    },
-                }
-            ],
+            "errors": [{"message": f"Access Denied: {role.name} required", "path": [mutation]}]
         }
+        return Response(content=json.dumps(payload), status_code=200, media_type="application/json")
 
-        return Response(
-            content=json.dumps(response_payload),
-            status_code=200,  # GraphQL returns 200 even for errors
-            media_type="application/json",
-        )
-
-    # ========================================
-    # REST RBAC
-    # ========================================
-
+    @staticmethod
     def _forbidden_html_response(
-        self, user: AuthUser, path: str, method: str, reason: str
+        user: AuthUser, path: str, method: str, reason: str
     ) -> Response:
-        """Generate HTML 403 Forbidden page."""
+        """Generate HTML 403 response."""
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -285,25 +162,10 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
                     background: #1a1d29;
                     max-width: 500px;
                 }}
-                h1 {{
-                    color: #ff6b6b;
-                    margin: 0 0 20px 0;
-                }}
-                .info {{
-                    color: #888;
-                    margin: 10px 0;
-                }}
-                .detail {{
-                    font-size: 12px;
-                    color: #555;
-                    margin-top: 20px;
-                }}
-                a {{
-                    color: #667eea;
-                    text-decoration: none;
-                    margin-top: 20px;
-                    display: inline-block;
-                }}
+                h1 {{ color: #ff6b6b; margin: 0 0 20px 0; }}
+                .info {{ color: #888; margin: 10px 0; }}
+                .detail {{ font-size: 12px; color: #555; margin-top: 20px; }}
+                a {{ color: #667eea; text-decoration: none; margin-top: 20px; display: inline-block; }}
             </style>
         </head>
         <body>
@@ -311,7 +173,7 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
                 <h1>🔒 403 Forbidden</h1>
                 <p class="info">
                     User <strong>{user.username}</strong> (role: <strong>{user.role.name}</strong>)
-                    does not have permission to <strong>{method}</strong> on <strong>{path}</strong>.
+                    cannot <strong>{method}</strong> on <strong>{path}</strong>.
                 </p>
                 <p class="detail">Reason: {reason}</p>
                 <a href="/">← Return to Dashboard</a>
@@ -319,4 +181,8 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
         </body>
         </html>
         """
-        return Response(content=html, status_code=403, media_type="text/html")
+        return Response(
+            content=html,
+            status_code=403,
+            media_type="text/html"
+        )

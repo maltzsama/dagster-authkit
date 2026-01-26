@@ -1,192 +1,99 @@
 """
-Session Management System
-
-Cryptographically signed cookies using itsdangerous.
-Tamper-proof sessions without session backend.
+Session Management
+Supports Stateless (Signed Cookies) and Stateful (Redis) backends.
 """
 
+import json
 import logging
+import os
+import secrets
+from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer
 
 logger = logging.getLogger(__name__)
 
+# --- Interfaces ---
 
-class SessionManager:
-    """
-    Manages sessions using cryptographically signed cookies.
+class SessionBackend(ABC):
+    @abstractmethod
+    def create(self, user_data: Dict[str, Any]) -> str: ...
+    @abstractmethod
+    def validate(self, token: str) -> Optional[Dict[str, Any]]: ...
+    @abstractmethod
+    def revoke_all(self, username: str) -> int: ...
 
-    Uses itsdangerous.URLSafeTimedSerializer for:
-    - Signing cookies (prevents tampering)
-    - Timestamp cookies (auto-expiration)
-    - URL-safe encoding
-    """
+# --- Implementations ---
 
-    def __init__(
-        self,
-        secret_key: str,
-        cookie_name: str = "dagster_session",
-        max_age: int = 86400,  # 24 hours
-        salt: str = "dagster-auth-session",
-    ):
-        """
-        Args:
-            secret_key: Secret key for signing (CRITICAL - must persist!)
-            cookie_name: Cookie name
-            max_age: Lifetime in seconds
-            salt: Salt for key derivation
-        """
-        if not secret_key:
-            raise ValueError("SECRET_KEY is required for session management")
-
-        self.secret_key = secret_key
-        self.cookie_name = cookie_name
+class RedisBackend(SessionBackend):
+    def __init__(self, redis_url: str, max_age: int):
+        import redis
+        self.client = redis.from_url(redis_url, decode_responses=True)
         self.max_age = max_age
-        self.salt = salt
 
-        # Serializer for signing/verifying cookies
-        self.serializer = URLSafeTimedSerializer(secret_key=secret_key, salt=salt)
-
-    def create_session(self, user_data: Dict[str, Any]) -> str:
-        """
-        Creates signed session for a user.
-
-        Args:
-            user_data: Dict with user data (username, roles, etc.)
-
-        Returns:
-            str: Session token (signed, URL-safe)
-
-        Example:
-            >>> manager = SessionManager('secret-key-123')
-            >>> token = manager.create_session({
-            ...     'username': 'admin',
-            ...     'roles': ['admin', 'editor']
-            ... })
-            >>> print(token)
-            'eyJhbGc...'  # URL-safe signed token
-        """
-        token = self.serializer.dumps(user_data)
-        logger.debug(f"Created session for user: {user_data.get('username')}")
+    def create(self, user_data: Dict[str, Any]) -> str:
+        token = secrets.token_urlsafe(32)
+        username = user_data["username"]
+        self.client.setex(f"sess:{token}", self.max_age, json.dumps(user_data))
+        self.client.sadd(f"user_sess:{username}", token)
         return token
 
-    def validate_session(self, token: str) -> Optional[Dict[str, Any]]:
-        """
-        Validates and decodes session token.
+    def validate(self, token: str) -> Optional[Dict[str, Any]]:
+        data = self.client.get(f"sess:{token}")
+        return json.loads(data) if data else None
 
-        Args:
-            token: Session token (from cookie)
+    def revoke_all(self, username: str) -> int:
+        key = f"user_sess:{username}"
+        tokens = self.client.smembers(key)
+        for t in tokens:
+            self.client.delete(f"sess:{t}")
+        return self.client.delete(key)
 
-        Returns:
-            Dict with user data if valid, None if invalid/expired
+class CookieBackend(SessionBackend):
+    """Stateless but with versioning for global revocation."""
+    def __init__(self, secret_key: str, max_age: int):
+        self.serializer = URLSafeTimedSerializer(secret_key)
+        self.max_age = max_age
+        self._versions: Dict[str, int] = {} # Reset on pod restart (K8s limitation)
 
-        Example:
-            >>> user_data = manager.validate_session(token)
-            >>> if user_data:
-            ...     print(f"Authenticated as: {user_data['username']}")
-            ... else:
-            ...     print("Invalid or expired session")
-        """
-        if not token:
-            return None
+    def create(self, user_data: Dict[str, Any]) -> str:
+        v = self._versions.get(user_data["username"], 1)
+        return self.serializer.dumps({**user_data, "_v": v})
 
+    def validate(self, token: str) -> Optional[Dict[str, Any]]:
         try:
-            # Loads with max_age = auto-expiration
-            user_data = self.serializer.loads(token, max_age=self.max_age)
+            data = self.serializer.loads(token, max_age=self.max_age)
+            if data.get("_v") != self._versions.get(data.get("username"), 1):
+                return None
+            return data
+        except: return None
 
-            logger.debug(f"Valid session for user: {user_data.get('username')}")
-            return user_data
+    def revoke_all(self, username: str) -> int:
+        self._versions[username] = self._versions.get(username, 1) + 1
+        return 1
 
-        except SignatureExpired:
-            logger.info("Session expired")
-            return None
+# --- The Orchestrator ---
 
-        except BadSignature:
-            logger.warning("Invalid session signature (tampering detected)")
-            return None
-
-        except Exception as e:
-            logger.error(f"Session validation error: {e}")
-            return None
-
-    def invalidate_session(self) -> None:
-        """
-        Invalidates session (in practice, just removes cookie in response).
-
-        Note: Since sessions are stateless (signed), there's no backend
-        to invalidate. Invalidation happens by removing cookie from client.
-        """
-        # No-op here, actual invalidation happens in middleware
-        # by setting cookie with max_age=0
-        pass
-
-
-# ========================================
-# Global Singleton Instance
-# ========================================
-
-_session_manager: Optional[SessionManager] = None
-
-
-def get_session_manager() -> SessionManager:
-    """
-    Returns session manager singleton.
-
-    Returns:
-        Global SessionManager instance
-
-    Raises:
-        RuntimeError: If SECRET_KEY not configured
-    """
-    global _session_manager
-
-    if _session_manager is None:
+class SessionManager:
+    def __init__(self):
         from dagster_authkit.utils.config import config
 
-        if not config.SECRET_KEY:
-            raise RuntimeError(
-                "SECRET_KEY not configured! " "Set DAGSTER_AUTH_SECRET_KEY environment variable."
-            )
+        redis_url = os.getenv("DAGSTER_AUTH_REDIS_URL")
+        if redis_url:
+            self.backend = RedisBackend(redis_url, config.SESSION_MAX_AGE)
+            logger.info("SessionManager: Using Redis (Stateful)")
+        else:
+            self.backend = CookieBackend(config.SECRET_KEY, config.SESSION_MAX_AGE)
+            logger.info("SessionManager: Using Signed Cookies (Stateless)")
 
-        _session_manager = SessionManager(
-            secret_key=config.SECRET_KEY,
-            cookie_name=config.SESSION_COOKIE_NAME,
-            max_age=config.SESSION_MAX_AGE,
-            salt="dagster-auth-session-v1",
-        )
+    def create(self, user_data: Dict[str, Any]) -> str:
+        return self.backend.create(user_data)
 
-        logger.info("SessionManager initialized")
+    def validate(self, token: str) -> Optional[Dict[str, Any]]:
+        return self.backend.validate(token)
 
-    return _session_manager
+    def revoke_all(self, username: str) -> int:
+        return self.backend.revoke_all(username)
 
-
-# ========================================
-# Convenience Functions
-# ========================================
-
-
-def create_session(user_data: Dict[str, Any]) -> str:
-    """
-    Convenience function to create session.
-
-    Args:
-        user_data: Dict with user info
-
-    Returns:
-        Session token
-    """
-    return get_session_manager().create_session(user_data)
-
-
-def validate_session(token: str) -> Optional[Dict[str, Any]]:
-    """
-    Convenience function to validate session.
-
-    Args:
-        token: Session token
-
-    Returns:
-        User data or None
-    """
-    return get_session_manager().validate_session(token)
+sessions = SessionManager()

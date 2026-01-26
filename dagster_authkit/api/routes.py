@@ -10,16 +10,20 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
 
-from dagster_authkit.auth.backends.base import AuthUser
 from dagster_authkit.auth.rate_limiter import (
     is_rate_limited,
     record_login_attempt,
     reset_rate_limit,
 )
 from dagster_authkit.auth.security import SecurityHardening
-from dagster_authkit.auth.session import create_session, validate_session
+from dagster_authkit.auth.session import sessions
 from dagster_authkit.core.registry import get_backend
-from dagster_authkit.utils.audit import log_login_attempt, log_logout, log_rate_limit_violation
+from dagster_authkit.utils.audit import (
+    log_login_attempt,
+    log_logout,
+    log_rate_limit_violation,
+    get_audit_logger
+)
 from dagster_authkit.utils.config import config
 
 logger = logging.getLogger(__name__)
@@ -186,39 +190,22 @@ async def login_page(request: Request) -> Response:
 
 
 async def process_login(request: Request) -> Response:
-    """
-    POST /auth/process - Processes login.
-
-    Args:
-        request: Starlette Request
-
-    Returns:
-        Redirect to dashboard or login with error
-    """
-    # Parse form data
+    """POST /auth/process - Processes login with strict auditing."""
     form = await request.form()
-    username = form.get("username", "").strip()
+    username = SecurityHardening.sanitize_username(form.get("username", "").strip())
     password = form.get("password", "")
     next_url = form.get("next", "/")
 
-    # Sanitize username
-    username = SecurityHardening.sanitize_username(username)
-
-    # Validate next URL
     if not SecurityHardening.validate_redirect_url(next_url):
         next_url = "/"
 
-    # Get client IP (for audit log)
     client_ip = request.client.host if request.client else None
 
-    # ========================================
-    # 1. Check rate limiting
-    # ========================================
-
+    # 1. Rate Limiting Check
     is_limited, attempts = is_rate_limited(username)
-
     if is_limited:
         logger.warning(f"Rate limit exceeded for '{username}' ({attempts} attempts)")
+        # RESTORED: Vital for security auditing and Fail2Ban integration
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({attempts} attempts)")
         log_rate_limit_violation(username, client_ip, attempts)
 
@@ -227,64 +214,40 @@ async def process_login(request: Request) -> Response:
             status_code=302,
         )
 
-    # ========================================
-    # 2. Authenticate with backend
-    # ========================================
-
+    # 2. Backend Authentication
     try:
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
-        user = backend.authenticate(username, password)  # Returns AuthUser or None
-
+        user = backend.authenticate(username, password)
     except Exception as e:
         logger.error(f"Backend error during authentication: {e}")
         log_login_attempt(username, False, client_ip, "BACKEND_ERROR")
-
         return RedirectResponse(
-            url=f"/auth/login?next={next_url}&error=Authentication+system+error.", status_code=302
+            url=f"/auth/login?next={next_url}&error=Authentication+system+error.",
+            status_code=302
         )
 
-    # ========================================
-    # 3. Check authentication result
-    # ========================================
-
+    # 3. Handle Failure
     if not user:
-        # Invalid credentials
         logger.info(f"Failed login attempt for '{username}'")
-
-        # Record attempt (rate limiting)
         record_login_attempt(username)
-
-        # Audit log
         log_login_attempt(username, False, client_ip, "INVALID_CREDENTIALS")
-
         return RedirectResponse(
-            url=f"/auth/login?next={next_url}&error=Invalid+username+or+password.", status_code=302
+            url=f"/auth/login?next={next_url}&error=Invalid+username+or+password.",
+            status_code=302
         )
 
-    # ========================================
-    # 4. Login successful!
-    # ========================================
-
-    logger.info(f"Successful login: '{user.username}' with role {user.role.name}")
-
-    # Reset rate limit counter
+    # 4. Success - Session and Logging
+    logger.info(f"Successful login: '{user.username}' (role: {user.role.name})")
     reset_rate_limit(username)
-
-    # Audit log
     log_login_attempt(username, True, client_ip)
 
-    # Create session (convert AuthUser → dict for signing)
-    session_token = create_session(user.to_dict())
+    # v1.0 Orchestrator call
+    session_token = sessions.create(user.to_dict())
 
-    # Audit session creation
-    from dagster_authkit.utils.audit import get_audit_logger
+    # RESTORED: Session creation audit
+    get_audit_logger().session_created(username, session_token[:16])
 
-    get_audit_logger().session_created(username, session_token[:16])  # Log hash prefix
-
-    # Create response with redirect
     response = RedirectResponse(url=next_url, status_code=302)
-
-    # Set session cookie
     response.set_cookie(
         key=config.SESSION_COOKIE_NAME,
         value=session_token,
@@ -293,46 +256,31 @@ async def process_login(request: Request) -> Response:
         secure=config.SESSION_COOKIE_SECURE,
         samesite=config.SESSION_COOKIE_SAMESITE,
     )
-
     return response
 
 
 async def logout(request: Request) -> Response:
-    """
-    GET /auth/logout - Logs out user.
-
-    Args:
-        request: Starlette Request
-
-    Returns:
-        Redirect to login
-    """
-    # Get username from session (if exists)
+    """GET /auth/logout - Invalidate session and log event."""
     session_token = request.cookies.get(config.SESSION_COOKIE_NAME)
     username = "unknown"
 
     if session_token:
-        user_data = validate_session(session_token)
+        # Use v1.0 orchestrator to identify user
+        user_data = sessions.validate(session_token)
         if user_data:
             username = user_data.get("username", "unknown")
 
-    # Audit log
     client_ip = request.client.host if request.client else None
     log_logout(username, client_ip)
-
     logger.info(f"User '{username}' logged out")
 
-    # Create response with redirect
     response = RedirectResponse(url="/auth/login", status_code=302)
-
-    # Delete session cookie (max_age=0)
     response.delete_cookie(
         key=config.SESSION_COOKIE_NAME,
         httponly=config.SESSION_COOKIE_HTTPONLY,
         secure=config.SESSION_COOKIE_SECURE,
         samesite=config.SESSION_COOKIE_SAMESITE,
     )
-
     return response
 
 
