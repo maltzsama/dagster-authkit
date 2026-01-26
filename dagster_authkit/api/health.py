@@ -11,6 +11,9 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict
 
+from dagster_authkit.utils.config import config
+from dagster_authkit.core.registry import get_backend
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,7 +130,6 @@ def get_health_status() -> Dict[str, Any]:
     Returns:
         Dict with status and details
     """
-    from .config import config
 
     health = {
         "status": "healthy",
@@ -139,7 +141,6 @@ def get_health_status() -> Dict[str, Any]:
 
     # Check 1: Backend accessibility
     try:
-        from .registry import get_backend
 
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
         health["checks"]["backend"] = {"status": "ok", "name": backend.get_name()}
@@ -210,8 +211,6 @@ def create_health_routes(routes):
         elif check_type == "ready":
             # Readiness: Can serve traffic?
             try:
-                from .config import config
-                from .registry import get_backend
 
                 backend = get_backend(config.AUTH_BACKEND, config.__dict__)
                 return JSONResponse({"ready": True}, status_code=200)

@@ -1,11 +1,11 @@
 """CLI tools for managing users in SQLite database."""
 
+import argparse
 import getpass
 from pathlib import Path
-import argparse
-
 
 from dagster_authkit.auth.backends.sqlite import SQLiteAuthBackend
+
 
 def handle_user_management():
     """
@@ -13,8 +13,7 @@ def handle_user_management():
     Parses arguments and dispatches to the correct command function.
     """
     parser = argparse.ArgumentParser(
-        prog="dagster-authkit", 
-        description="Dagster AuthKit - Administrative CLI"
+        prog="dagster-authkit", description="Dagster AuthKit - Administrative CLI"
     )
     subparsers = parser.add_subparsers(dest="command", help="Management commands")
 
@@ -28,6 +27,7 @@ def handle_user_management():
     else:
         parser.print_help()
         return 1
+
 
 def init_db_command(args):
     """Initialize a new database."""

@@ -1,5 +1,7 @@
 import logging
+
 from dagster_authkit.utils.config import config
+
 
 def setup_logging():
     """Configura o logging baseado no seu config.py original."""

@@ -5,18 +5,14 @@ Main orchestrator for the dagster-authkit package.
 """
 
 import sys
-import os
-import logging
-from dagster_authkit.utils.logging import setup_logging
-from dagster_authkit.utils.config import config
-from dagster_authkit.utils.display import (
-    print_banner, 
-    print_config_summary, 
-    show_security_banner
-)
-from dagster_authkit.core.patch import apply_patches
+
 from dagster_authkit.auth.manager import bootstrap_db
 from dagster_authkit.core.detection_layer import verify_dagster_api_compatibility
+from dagster_authkit.core.patch import apply_patches
+from dagster_authkit.utils.config import config
+from dagster_authkit.utils.display import print_banner, print_config_summary, show_security_banner
+from dagster_authkit.utils.logging import setup_logging
+
 
 def main():
     """
@@ -27,7 +23,7 @@ def main():
     4. Bootstrap database and manage first-run credentials.
     5. Delegate to Dagster webserver CLI.
     """
-    
+
     # 1. Initialize logging
     logger = setup_logging()
 
@@ -36,6 +32,7 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] in management_commands:
         try:
             from dagster_authkit.cli.cli_tools import handle_user_management
+
             return handle_user_management()
         except ImportError as e:
             logger.error(f"Failed to load CLI management tools: {e}")
@@ -70,21 +67,23 @@ def main():
     # 7. Delegate to Dagster CLI with Fallback Protection
     # We try both the modern 'dagster_webserver' and the legacy 'dagit' paths.
     logger.info("Patches active. Delegating to original Dagster CLI.")
-    
+
     dagster_cli_main = None
-    
+
     # Check current PYTHONPATH for debugging
     logger.debug(f"Python Path: {sys.path}")
 
     try:
         # Standard modern path (Dagster 1.10+)
         from dagster_webserver.cli import main as webserver_main
+
         dagster_cli_main = webserver_main
     except ImportError as e:
         logger.warning(f"Could not find 'dagster_webserver.cli': {e}")
         try:
             # Fallback for older versions
             from dagit.cli import main as dagit_main
+
             dagster_cli_main = dagit_main
         except ImportError:
             logger.error("CRITICAL: Dagster webserver CLI not found in current environment.")
@@ -97,13 +96,14 @@ def main():
 
     # Modify process name to ensure Click/Dagster commands behave correctly
     sys.argv[0] = "dagster-webserver"
-    
+
     try:
         logger.info("🚀 Launching Dagster core engine...")
         dagster_cli_main()
     except Exception as e:
         logger.critical(f"Unexpected crash in delegated process: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

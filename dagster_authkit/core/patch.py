@@ -1,10 +1,13 @@
 """
-Dagster Monkey-Patching Module - AuthKit Edition
+Dagster Monkey-Patching Module - "Native Infiltration" Edition
 
-Fixed: Escaped f-string braces for CSS/JS compatibility.
+Injects the user profile as a native item within the Dagster utility group,
+replicating internal classes and behavior to ensure a perfect visual fit.
 """
 
 import logging
+import json
+from typing import Callable
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
@@ -15,7 +18,7 @@ original_index_html = None
 
 
 def apply_patches() -> None:
-    logger.info("🔧 Applying Dagster webserver patches...")
+    logger.info("🔧 Applying native-mimicry UI patches for Dagster...")
 
     try:
         import dagster_webserver.webserver as webserver_module
@@ -33,8 +36,7 @@ def apply_patches() -> None:
 
         def patched_build_middleware(self):
             middlewares = original_build_middleware(self)
-            auth_middleware = Middleware(DagsterAuthMiddleware)
-            middlewares.insert(0, auth_middleware)
+            middlewares.insert(0, Middleware(DagsterAuthMiddleware))
             return middlewares
 
         webserver_module.DagsterWebserver.build_middleware = patched_build_middleware
@@ -44,7 +46,6 @@ def apply_patches() -> None:
     # PATCH 2: Routes
     try:
         original_build_routes = webserver_module.DagsterWebserver.build_routes
-
 
         def patched_build_routes(self):
             from starlette.routing import Mount
@@ -61,7 +62,7 @@ def apply_patches() -> None:
     except Exception as e:
         logger.error(f"❌ Routes patch failed: {e}")
 
-    # PATCH 3: UI Hijacking
+    # PATCH 3: UI Hijacking (Infiltration)
     try:
         original_index_html = webserver_module.DagsterWebserver.index_html_endpoint
 
@@ -72,111 +73,178 @@ def apply_patches() -> None:
     except Exception as e:
         logger.error(f"❌ UI patch failed: {e}")
 
-    logger.info("🎉 All Dagster patches applied successfully!")
-
 
 def _inject_ui_logic(self, request: Request):
     response = original_index_html(self, request)
-    user = getattr(request.state, "user", {"username": "Guest", "roles": ["viewer"]})
 
-    username = user.get("username", "Guest")
-    role = user.get("roles", ["viewer"])[0].upper()
-    initial = username[0].upper()
+    # 1. Resgate seguro dos dados
+    user = getattr(request.state, "user", {})
 
-    # Sign-Out SVG (Lucide/Feather style)
-    logout_svg = (
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-        '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>'
-        '<polyline points="16 17 21 12 16 7"></polyline>'
-        '<line x1="21" y1="12" x2="9" y2="12"></line></svg>'
+    # 2. Lógica de Fallback Robusta no Python
+    username = user.get("username") or "guest"
+    full_name = user.get("full_name") or username.capitalize()
+    email = user.get("email") or ""
+    roles = user.get("roles", ["viewer"])
+    role_display = roles[0].upper() if roles else "VIEWER"
+    initial = (full_name[0] if full_name else username[0]).upper()
+
+    # 3. Serialização limpa para o JS
+    user_data_json = json.dumps(
+        {
+            "full_name": full_name,
+            "email": email,
+            "role": role_display,
+            "initial": initial,
+            "has_email": bool(email),
+        }
     )
 
-    # Using raw f-string with proper escaping
     injection = rf"""
     <style>
-        #authkit-sidebar-card {{
-            margin: 8px;
-            padding: 8px;
+        .authkit-popover {{
+            display: none;
+            position: fixed;
+            bottom: 65px;
+            left: 12px;
+            width: 250px;
+            background: #1a1d29;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+        }}
+        .authkit-popover.active {{
+            display: block;
+        }}
+        .authkit-header {{
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+        .authkit-avatar-circle {{
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
             display: flex;
             align-items: center;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            transition: all 0.2s ease;
-            overflow: hidden;
-            min-height: 44px;
-        }}
-        #authkit-sidebar-card:hover {{
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.15);
-        }}
-        .authkit-avatar {{
-            min-width: 28px; height: 28px;
-            background: #4f4f4f; color: white;
-            border-radius: 6px; display: flex;
-            align-items: center; justify-content: center;
-            font-weight: bold; font-size: 13px;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            font-size: 10px;
             flex-shrink: 0;
         }}
-        .authkit-content {{
-            margin-left: 12px;
-            display: flex;
-            flex-direction: column;
-            white-space: nowrap;
-            flex-grow: 1;
+        .authkit-item {{
+            padding: 10px 16px;
+            display: block;
+            color: #ccc;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background-color 0.2s;
         }}
-        /* Hide text when Dagster sidebar collapses */
-        [class*="MainNavigation_collapsed"] .authkit-content,
-        [class*="MainNavigation_collapsed"] .authkit-logout {{
-            display: none;
-        }}
-        /* Center avatar in collapsed sidebar */
-        [class*="MainNavigation_collapsed"] #authkit-sidebar-card {{
-            justify-content: center;
-            padding: 8px 0;
-        }}
-        .authkit-user {{ color: #ffffff; font-size: 13px; font-weight: 600; line-height: 1.2; }}
-        .authkit-role {{ color: #888; font-size: 10px; text-transform: uppercase; }}
-        .authkit-logout {{
-            color: #ff6b6b; opacity: 0.7;
-            text-decoration: none; display: flex;
-            align-items: center; justify-content: center;
-            padding: 4px; border-radius: 4px;
-            transition: all 0.2s;
-        }}
-        .authkit-logout:hover {{ 
-            opacity: 1; 
-            background: rgba(255, 107, 107, 0.15);
+        .authkit-item:hover {{
+            background-color: rgba(255, 255, 255, 0.05);
         }}
     </style>
+
     <script>
-        function injectAuthUI() {{
-            const bottomGroup = document.querySelector('div[class*="MainNavigation_bottomGroups"]');
+        (function() {{
+            const u = {user_data_json};
             
-            if (bottomGroup && !document.getElementById('authkit-sidebar-card')) {{
-                const card = document.createElement('div');
-                card.id = 'authkit-sidebar-card';
-                card.innerHTML = `
-                    <div class="authkit-avatar" title="{username}">{initial}</div>
-                    <div class="authkit-content">
-                        <span class="authkit-user">{username}</span>
-                        <span class="authkit-role">{role}</span>
-                    </div>
-                    <a href="/auth/logout" class="authkit-logout" title="Sign Out">
-                        {logout_svg}
-                    </a>
-                `;
-                bottomGroup.prepend(card);
+            function infiltrate() {{
+                const groups = document.querySelectorAll('div[class*="MainNavigation_group"]');
+                const targetGroup = groups[groups.length - 1];
+                
+                if (!targetGroup || document.getElementById('authkit-nav-item')) return;
+
+                const itemContainer = document.createElement('div');
+                itemContainer.id = 'authkit-nav-item';
+                
+                const sibling = targetGroup.querySelector('div[class*="itemContainer"]');
+                if (sibling) itemContainer.className = sibling.className;
+
+                // HTML com concatenação correta (sem template strings problemáticas)
+                itemContainer.innerHTML = 
+                    '<button id="authkit-trigger" style="background:transparent; border:none; padding:0; width:100%; cursor:pointer; color:inherit;">' +
+                        '<div class="authkit-box-proxy" style="display:flex; align-items:center; gap:8px; padding:8px 12px;">' +
+                            '<div class="authkit-avatar-circle">' + u.initial + '</div>' +
+                            '<div class="authkit-label" style="flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px;">' +
+                                u.full_name +
+                            '</div>' +
+                        '</div>' +
+                    '</button>' +
+                    '<div class="authkit-popover" id="authkit-popover">' +
+                        '<div class="authkit-header">' +
+                            '<div style="font-weight: 600; color: white;">' + u.full_name + '</div>' +
+                            '<div style="font-size: 11px; color: #667eea; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">' + u.role + '</div>' +
+                            (u.has_email ? '<div style="font-size: 12px; color: #888; margin-top: 4px;">' + u.email + '</div>' : '') +
+                        '</div>' +
+                        '<a href="/auth/logout" class="authkit-item" style="color:#ff6b6b;">Sign Out</a>' +
+                    '</div>';
+
+                targetGroup.prepend(itemContainer);
+
+                // Clone de estilos do botão de Settings para manter consistência visual
+                const settingsBtn = targetGroup.querySelector('button[class*="itemButton"]');
+                if (settingsBtn) {{
+                    const trigger = document.getElementById('authkit-trigger');
+                    trigger.className = settingsBtn.className;
+                    // Copiar classes do container interno para alinhamento perfeito
+                    const boxProxy = itemContainer.querySelector('.authkit-box-proxy');
+                    const originalBox = settingsBtn.querySelector('div[class*="Box_"]');
+                    if (originalBox) {{
+                        boxProxy.className = originalBox.className + ' authkit-box-proxy';
+                    }}
+                }}
+
+                // Event handlers
+                const trigger = document.getElementById('authkit-trigger');
+                const popover = document.getElementById('authkit-popover');
+                
+                trigger.addEventListener('click', (e) => {{
+                    e.stopPropagation();
+                    e.preventDefault();
+                    popover.classList.toggle('active');
+                }});
+                
+                // Fechar popover ao clicar fora
+                document.addEventListener('click', (e) => {{
+                    if (popover && !itemContainer.contains(e.target)) {{
+                        popover.classList.remove('active');
+                    }}
+                }});
+                
+                // Fechar com Escape key
+                document.addEventListener('keydown', (e) => {{
+                    if (e.key === 'Escape' && popover) {{
+                        popover.classList.remove('active');
+                    }}
+                }});
+                
+                // Fechar ao navegar (clicar em links do popover)
+                popover.querySelectorAll('a').forEach(link => {{
+                    link.addEventListener('click', () => {{
+                        popover.classList.remove('active');
+                    }});
+                }});
             }}
-        }}
-        const observer = new MutationObserver(injectAuthUI);
-        observer.observe(document.body, {{ childList: true, subtree: true }});
-        injectAuthUI();
+
+            // Executar quando o DOM estiver pronto
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', infiltrate);
+            }} else {{
+                infiltrate();
+            }}
+            
+            // Observar mudanças no DOM (sidebar pode ser carregada dinamicamente)
+            const observer = new MutationObserver(infiltrate);
+            observer.observe(document.body, {{ childList: true, subtree: true }});
+            
+            // Fallback: tentar novamente após 500ms se não encontrou
+            setTimeout(infiltrate, 500);
+        }})();
     </script>
     """
 
-    # Convert response body to string safely
     if hasattr(response.body, "decode"):
         html = response.body.decode("utf-8")
     else:

@@ -144,7 +144,7 @@ def get_rate_limiter() -> RateLimiter:
     global _rate_limiter
 
     if _rate_limiter is None:
-        from .config import config
+        from dagster_authkit.utils.config import config
 
         _rate_limiter = RateLimiter(
             max_attempts=config.RATE_LIMIT_MAX_ATTEMPTS,

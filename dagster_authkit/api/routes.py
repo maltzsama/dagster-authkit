@@ -10,12 +10,16 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
 
-from dagster_authkit.utils.audit import log_login_attempt, log_logout
-from dagster_authkit.utils.config import config
-from dagster_authkit.auth.rate_limiter import is_rate_limited, record_login_attempt, reset_rate_limit
-from dagster_authkit.core.registry import get_backend
+from dagster_authkit.auth.rate_limiter import (
+    is_rate_limited,
+    record_login_attempt,
+    reset_rate_limit,
+)
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import create_session
+from dagster_authkit.core.registry import get_backend
+from dagster_authkit.utils.audit import log_login_attempt, log_logout, log_rate_limit_violation
+from dagster_authkit.utils.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +220,6 @@ async def process_login(request: Request) -> Response:
         logger.warning(f"Rate limit exceeded for '{username}' ({attempts} attempts)")
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({attempts} attempts)")
 
-        from .audit import log_rate_limit_violation
-
         log_rate_limit_violation(username, client_ip, attempts)
 
         return RedirectResponse(
@@ -275,7 +277,7 @@ async def process_login(request: Request) -> Response:
     session_token = create_session(user_data)
 
     # Audit session creation
-    from .audit import get_audit_logger
+    from dagster_authkit.utils.audit import get_audit_logger
 
     get_audit_logger().session_created(username, session_token[:16])  # Log hash prefix
 
@@ -306,7 +308,7 @@ async def logout(request: Request) -> Response:
         Redirect to login
     """
     # Get username from session (if exists)
-    from .session import validate_session
+    from dagster_authkit.auth.session import validate_session
 
     session_token = request.cookies.get(config.SESSION_COOKIE_NAME)
     username = "unknown"
