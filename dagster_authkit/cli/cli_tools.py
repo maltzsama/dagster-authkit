@@ -71,11 +71,7 @@ def init_db_command(args):
         full_name = input("Full name (optional): ").strip() or "Administrator"
 
         if backend.add_user(
-                username=username,
-                password=password,
-                role=Role.ADMIN,
-                email=email,
-                full_name=full_name
+            username=username, password=password, role=Role.ADMIN, email=email, full_name=full_name
         ):
             print(f"✅ Admin user '{username}' created successfully")
             print(f"   Role: ADMIN")
@@ -252,6 +248,28 @@ def delete_user_command(args):
         print(f"❌ Failed to delete user (user not found)")
         return 1
 
+def list_permissions_command(args):
+    """List all mutation permissions by role."""
+    from dagster_authkit.auth.backends.base import Role, RolePermissions
+
+    print("\n" + "=" * 70)
+    print("  📋  DAGSTER AUTHKIT - RBAC PERMISSIONS")
+    print("=" * 70)
+
+    for role in [Role.VIEWER, Role.LAUNCHER, Role.EDITOR, Role.ADMIN]:
+        permissions = RolePermissions.list_permissions(role)
+
+        print(f"\n🔹 {role.name} (Level {role.value}) - {len(permissions)} mutations\n")
+
+        if role == Role.VIEWER:
+            print("   (Read-only access - no mutations allowed)")
+        else:
+            for mutation in sorted(permissions):
+                print(f"   • {mutation}")
+
+    print("\n" + "=" * 70)
+    return 0
+
 
 def setup_cli_parser(subparsers):
     """Setup CLI argument parsers for user management commands."""
@@ -320,3 +338,11 @@ def setup_cli_parser(subparsers):
     delete_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation")
     delete_parser.add_argument("--db-path", help="Database path (default: ./dagster_auth.db)")
     delete_parser.set_defaults(func=delete_user_command)
+
+    # ========================================
+    # list-permissions command
+    # ========================================
+    perms_parser = subparsers.add_parser(
+        "list-permissions", help="List all RBAC permissions by role"
+    )
+    perms_parser.set_defaults(func=list_permissions_command)

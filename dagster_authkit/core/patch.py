@@ -115,8 +115,8 @@ def _inject_ui_logic(self, request: Request):
 
         /* ===== AVATAR CIRCLE ===== */
         .authkit-avatar-circle {{
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 50%;
             display: flex;
@@ -136,7 +136,7 @@ def _inject_ui_logic(self, request: Request):
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 13px;
+            font-size: 14px;
         }}
 
         /* ===== POPOVER ===== */

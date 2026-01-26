@@ -36,6 +36,171 @@ class Role(IntEnum):
 
 
 # ========================================
+# Role Permissions (RBAC)
+# ========================================
+
+from typing import Optional, Set
+
+
+class RolePermissions:
+    """
+    Defines GraphQL mutation permissions for each role.
+
+    Permissions are hierarchical:
+    - ADMIN can do everything (ADMIN + EDITOR + LAUNCHER)
+    - EDITOR can do EDITOR + LAUNCHER
+    - LAUNCHER can do only LAUNCHER
+    - VIEWER can only read
+    """
+
+    # LAUNCHER (20) - Execution Operations
+    LAUNCHER_MUTATIONS: Set[str] = frozenset(
+        {
+            "launchRun",
+            "launchPipelineExecution",
+            "launchRunReexecution",
+            "launchPipelineReexecution",
+            "terminateRun",
+            "terminatePipelineExecution",
+            "terminateRuns",
+            "deleteRun",
+            "deletePipelineRun",
+        }
+    )
+
+    # EDITOR (30) - Configuration & Management
+    EDITOR_MUTATIONS: Set[str] = frozenset(
+        {
+            # Schedules
+            "startSchedule",
+            "stopRunningSchedule",
+            "resetSchedule",
+            "scheduleDryRun",
+            # Sensors
+            "startSensor",
+            "stopSensor",
+            "resetSensor",
+            "setSensorCursor",
+            "sensorDryRun",
+            # Assets
+            "wipeAssets",
+            "reportRunlessAssetEvents",
+            "setAutoMaterializePaused",
+            # Backfills
+            "launchPartitionBackfill",
+            "launchBackfill",
+            "cancelPartitionBackfill",
+            "resumePartitionBackfill",
+            "reexecutePartitionBackfill",
+            # Partitions
+            "addDynamicPartition",
+            "deleteDynamicPartitions",
+            # Multiple runs
+            "launchMultipleRuns",
+            # Concurrency
+            "setConcurrencyLimit",
+            "deleteConcurrencyLimit",
+            "freeConcurrencySlotsForRun",
+            "freeConcurrencySlots",
+        }
+    )
+
+    # ADMIN (40) - System Operations
+    ADMIN_MUTATIONS: Set[str] = frozenset(
+        {
+            "reloadRepositoryLocation",
+            "reloadWorkspace",
+            "shutdownRepositoryLocation",
+        }
+    )
+
+    @classmethod
+    def get_required_role(cls, mutation_name: str) -> Optional[Role]:
+        """
+        Get the minimum required role for a GraphQL mutation.
+
+        Args:
+            mutation_name: Name of the GraphQL mutation
+
+        Returns:
+            Required Role (LAUNCHER/EDITOR/ADMIN) or None if no restriction
+
+        Example:
+            >>> RolePermissions.get_required_role("launchRun")
+            Role.LAUNCHER
+            >>> RolePermissions.get_required_role("startSchedule")
+            Role.EDITOR
+            >>> RolePermissions.get_required_role("logTelemetry")
+            None
+        """
+        if mutation_name in cls.LAUNCHER_MUTATIONS:
+            return Role.LAUNCHER
+        elif mutation_name in cls.EDITOR_MUTATIONS:
+            return Role.EDITOR
+        elif mutation_name in cls.ADMIN_MUTATIONS:
+            return Role.ADMIN
+        return None  # No restriction (e.g., logTelemetry, setNuxSeen)
+
+    @classmethod
+    def can_execute(cls, user_role: Role, mutation_name: str) -> bool:
+        """
+        Check if a role can execute a mutation.
+
+        Respects role hierarchy (ADMIN > EDITOR > LAUNCHER > VIEWER).
+
+        Args:
+            user_role: User's role
+            mutation_name: Name of the GraphQL mutation
+
+        Returns:
+            True if user can execute, False otherwise
+
+        Example:
+            >>> RolePermissions.can_execute(Role.LAUNCHER, "launchRun")
+            True
+            >>> RolePermissions.can_execute(Role.VIEWER, "launchRun")
+            False
+            >>> RolePermissions.can_execute(Role.ADMIN, "startSchedule")
+            True
+        """
+        required_role = cls.get_required_role(mutation_name)
+        if required_role is None:
+            return True  # No restriction
+        return user_role >= required_role
+
+    @classmethod
+    def list_permissions(cls, role: Role) -> Set[str]:
+        """
+        List all mutations a role can execute.
+
+        Includes inherited permissions from lower roles.
+
+        Args:
+            role: Role to check
+
+        Returns:
+            Set of mutation names
+
+        Example:
+            >>> perms = RolePermissions.list_permissions(Role.EDITOR)
+            >>> "launchRun" in perms
+            True
+            >>> "startSchedule" in perms
+            True
+        """
+        permissions = set()
+
+        if role >= Role.LAUNCHER:
+            permissions.update(cls.LAUNCHER_MUTATIONS)
+        if role >= Role.EDITOR:
+            permissions.update(cls.EDITOR_MUTATIONS)
+        if role >= Role.ADMIN:
+            permissions.update(cls.ADMIN_MUTATIONS)
+
+        return permissions
+
+
+# ========================================
 # AUTH USER (Universal Representation)
 # ========================================
 
