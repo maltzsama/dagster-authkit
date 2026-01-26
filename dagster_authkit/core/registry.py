@@ -9,7 +9,7 @@ import logging
 from importlib.metadata import entry_points
 from typing import Any, Dict, Type
 
-from dagster_authkit.auth.backends import AuthBackend
+from dagster_authkit.auth.backends.base import AuthBackend
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class BackendRegistry:
 
         Entry point format (pyproject.toml):
             [project.entry-points."dagster_auth.backends"]
-            dummy = "dagster_authkit.backends.dummy:DummyAuthBackend"
-            sqlite = "dagster_authkit.backends.sqlite:SQLiteAuthBackend"
+            dummy = "dagster_authkit.auth.backends.dummy:DummyAuthBackend"
+            sqlite = "dagster_authkit.auth.backends.sqlite:SQLiteAuthBackend"
         """
         if cls._initialized:
             return
@@ -88,8 +88,8 @@ class BackendRegistry:
             ValueError: If backend doesn't exist
 
         Example:
-            >>> from dagster_authkit.registry import get_backend
-            >>> from dagster_authkit.config import config
+            >>> from dagster_authkit.core.registry import get_backend
+            >>> from dagster_authkit.utils.config import config
             >>> backend = get_backend('sqlite', config.__dict__)
             >>> user = backend.authenticate('admin', 'password123')
         """
@@ -125,7 +125,7 @@ class BackendRegistry:
             List of backend names
 
         Example:
-            >>> from dagster_authkit.registry import list_available_backends
+            >>> from dagster_authkit.core.registry import list_available_backends
             >>> print(list_available_backends())
             ['dummy', 'sqlite', 'ldap']
         """

@@ -2,13 +2,13 @@
 Dummy Authentication Backend
 
 Hardcoded backend for development and testing.
-NEVER use in production!
+⚠️ NEVER use in production!
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
-from .base import AuthBackend
+from .base import AuthBackend, AuthUser, Role
 
 logger = logging.getLogger(__name__)
 
@@ -18,46 +18,58 @@ class DummyAuthBackend(AuthBackend):
     Dummy backend with hardcoded users.
 
     Available users:
-    - admin/admin → roles: [admin, editor, viewer]
-    - editor/editor → roles: [editor, viewer]
-    - viewer/viewer → roles: [viewer]
+    - admin/admin   → Role.ADMIN (full access)
+    - editor/editor → Role.EDITOR (manage schedules/sensors)
+    - launcher/launcher → Role.LAUNCHER (execute runs)
+    - viewer/viewer → Role.VIEWER (read-only)
 
     ⚠️ FOR DEVELOPMENT/TESTING ONLY!
+
+    Usage:
+        export DAGSTER_AUTH_BACKEND=dummy
+        dagster-authkit dev
     """
 
     # Hardcoded users
     USERS = {
         "admin": {
-            "username": "admin",
-            "password": "admin",  # Plaintext! Never do this in production
+            "password": "admin",  # INSECURE: Plaintext!
+            "role": Role.ADMIN,
             "email": "admin@localhost",
-            "display_name": "Administrator",
-            "roles": ["admin", "editor", "viewer"],
+            "full_name": "Administrator",
         },
         "editor": {
-            "username": "editor",
             "password": "editor",
+            "role": Role.EDITOR,
             "email": "editor@localhost",
-            "display_name": "Editor",
-            "roles": ["editor", "viewer"],
+            "full_name": "Editor User",
+        },
+        "launcher": {
+            "password": "launcher",
+            "role": Role.LAUNCHER,
+            "email": "launcher@localhost",
+            "full_name": "Launcher User",
         },
         "viewer": {
-            "username": "viewer",
             "password": "viewer",
+            "role": Role.VIEWER,
             "email": "viewer@localhost",
-            "display_name": "Viewer",
-            "roles": ["viewer"],
+            "full_name": "Viewer User",
         },
     }
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict):
         super().__init__(config)
         logger.warning(
-            "⚠️  DummyAuthBackend initialized - DO NOT USE IN PRODUCTION! "
-            "Hardcoded users: admin/admin, editor/editor, viewer/viewer"
+            "⚠️  DummyAuthBackend initialized - DO NOT USE IN PRODUCTION!\n"
+            "    Available users: admin/admin, editor/editor, launcher/launcher, viewer/viewer"
         )
 
-    def authenticate(self, username: str, password: str) -> Optional[Dict[str, Any]]:
+    # ========================================
+    # CORE METHODS (Abstract Implementation)
+    # ========================================
+
+    def authenticate(self, username: str, password: str) -> Optional[AuthUser]:
         """
         Authenticates against hardcoded users.
 
@@ -66,7 +78,7 @@ class DummyAuthBackend(AuthBackend):
             password: Password (plaintext comparison!)
 
         Returns:
-            User info dict or None
+            AuthUser if authenticated, None if failed
         """
         user = self.USERS.get(username)
 
@@ -74,20 +86,20 @@ class DummyAuthBackend(AuthBackend):
             logger.debug(f"Dummy auth: user '{username}' not found")
             return None
 
-        # INSECURE: Plaintext comparison!
+        # ⚠️ INSECURE: Plaintext comparison!
         if user["password"] == password:
             logger.info(f"Dummy auth: user '{username}' authenticated successfully")
-            return {
-                "username": user["username"],
-                "email": user["email"],
-                "display_name": user["display_name"],
-                "roles": user["roles"],
-            }
+            return AuthUser(
+                username=username,
+                role=user["role"],
+                email=user["email"],
+                full_name=user["full_name"],
+            )
         else:
             logger.warning(f"Dummy auth: invalid password for user '{username}'")
             return None
 
-    def get_user(self, username: str) -> Optional[Dict[str, Any]]:
+    def get_user(self, username: str) -> Optional[AuthUser]:
         """
         Fetches user info (without authenticating).
 
@@ -95,37 +107,62 @@ class DummyAuthBackend(AuthBackend):
             username: Username
 
         Returns:
-            User info dict (without password) or None
+            AuthUser or None
         """
         user = self.USERS.get(username)
 
         if not user:
             return None
 
-        return {
-            "username": user["username"],
-            "email": user["email"],
-            "display_name": user["display_name"],
-            "roles": user["roles"],
-        }
+        return AuthUser(
+            username=username, role=user["role"], email=user["email"], full_name=user["full_name"]
+        )
 
     def get_name(self) -> str:
         """Returns backend name."""
         return "dummy"
 
-    def list_users(self) -> List[Dict[str, Any]]:
+    # ========================================
+    # USER MANAGEMENT (Read-Only)
+    # ========================================
+
+    def list_users(self) -> List[AuthUser]:
         """
         Lists all hardcoded users.
 
         Returns:
-            List of user info dicts
+            List of AuthUser instances
         """
         return [
-            {
-                "username": user["username"],
-                "email": user["email"],
-                "display_name": user["display_name"],
-                "roles": user["roles"],
-            }
-            for user in self.USERS.values()
+            AuthUser(
+                username=username,
+                role=user["role"],
+                email=user["email"],
+                full_name=user["full_name"],
+            )
+            for username, user in self.USERS.items()
         ]
+
+    # ========================================
+    # UNSUPPORTED OPERATIONS
+    # ========================================
+
+    def add_user(self, *args, **kwargs) -> bool:
+        """Dummy backend doesn't support user creation."""
+        logger.error("DummyAuthBackend does not support add_user()")
+        return False
+
+    def delete_user(self, *args, **kwargs) -> bool:
+        """Dummy backend doesn't support user deletion."""
+        logger.error("DummyAuthBackend does not support delete_user()")
+        return False
+
+    def change_password(self, *args, **kwargs) -> bool:
+        """Dummy backend doesn't support password changes."""
+        logger.error("DummyAuthBackend does not support change_password()")
+        return False
+
+    def change_role(self, *args, **kwargs) -> bool:
+        """Dummy backend doesn't support role changes."""
+        logger.error("DummyAuthBackend does not support change_role()")
+        return False

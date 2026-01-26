@@ -21,6 +21,9 @@ class AuthConfig:
         # Authentication backend
         self.AUTH_BACKEND = os.getenv("DAGSTER_AUTH_BACKEND", "dummy").lower()
 
+        # SQLite database path
+        self.DAGSTER_AUTH_DB = os.getenv("DAGSTER_AUTH_DB", "./tmp/dagster_auth.db")
+
         # Rate limiting
         self.RATE_LIMIT_ENABLED = os.getenv("DAGSTER_AUTH_RATE_LIMIT", "true").lower() == "true"
         self.RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("DAGSTER_AUTH_RATE_LIMIT_ATTEMPTS", "5"))
@@ -44,15 +47,11 @@ class AuthConfig:
         self.OAUTH_USERINFO_URL = os.getenv("OAUTH_USERINFO_URL")
 
         # Admin Bootstrap (for Docker/K8s Infrastructure as Code)
-        self.ADMIN_USER = os.getenv("DAGSTER_AUTH_ADMIN_USER", "")
         self.ADMIN_PASSWORD = os.getenv("DAGSTER_AUTH_ADMIN_PASSWORD", "")
-        self.ADMIN_EMAIL = os.getenv("DAGSTER_AUTH_ADMIN_EMAIL", "")
 
         # Logging
         self.LOG_LEVEL = os.getenv("DAGSTER_AUTH_LOG_LEVEL", "INFO")
         self.AUDIT_LOG_ENABLED = os.getenv("DAGSTER_AUTH_AUDIT_LOG", "true").lower() == "true"
-
-        self.DB_URL = os.getenv("DAGSTER_AUTH_DB_URL", "sqlite:///./dagster_auth.db")
 
         # Validate critical settings
         self._validate()
@@ -68,10 +67,10 @@ class AuthConfig:
 
     def _validate(self):
         """Validate configuration settings."""
-        if self.AUTH_BACKEND not in ["dummy", "ldap", "oauth", "saml", "sqlite"]:
+        if self.AUTH_BACKEND not in ["dummy", "ldap", "oauth", "sqlite"]:
             raise ValueError(
                 f"Invalid AUTH_BACKEND: {self.AUTH_BACKEND}. "
-                f"Must be one of: dummy, ldap, oauth, saml, sqlite"
+                f"Must be one of: dummy, ldap, oauth, sqlite"
             )
 
         if self.SESSION_MAX_AGE < 60:

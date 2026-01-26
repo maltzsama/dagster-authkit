@@ -1,34 +1,42 @@
 #!/usr/bin/env python3
 """
 Dagster AuthKit CLI Entry Point
+
 Main orchestrator for the dagster-authkit package.
+Handles user management commands and delegates to Dagster webserver.
 """
 
 import sys
 
-from dagster_authkit.auth.manager import bootstrap_db
 from dagster_authkit.core.detection_layer import verify_dagster_api_compatibility
 from dagster_authkit.core.patch import apply_patches
 from dagster_authkit.utils.config import config
-from dagster_authkit.utils.display import print_banner, print_config_summary, show_security_banner
+from dagster_authkit.utils.display import print_banner, print_config_summary
 from dagster_authkit.utils.logging import setup_logging
 
 
 def main():
     """
     Main execution flow:
-    1. Initialize system logging.
-    2. Route to User Management CLI if requested.
-    3. Perform compatibility checks and patching.
-    4. Bootstrap database and manage first-run credentials.
-    5. Delegate to Dagster webserver CLI.
+    1. Initialize system logging
+    2. Route to User Management CLI if requested
+    3. Perform compatibility checks and patching
+    4. Delegate to Dagster webserver CLI
     """
 
     # 1. Initialize logging
     logger = setup_logging()
 
     # 2. Intercept User Management commands
-    management_commands = ["add-user", "list-users", "init-db", "delete-user", "change-password"]
+    management_commands = [
+        "user",  # New: user create/list/delete/change-password/change-role
+        "init-db",  # Legacy compatibility
+        "add-user",  # Legacy compatibility
+        "list-users",  # Legacy compatibility
+        "delete-user",  # Legacy compatibility
+        "change-password",  # Legacy compatibility
+    ]
+
     if len(sys.argv) > 1 and sys.argv[1] in management_commands:
         try:
             from dagster_authkit.cli.cli_tools import handle_user_management
@@ -48,7 +56,7 @@ def main():
     if not is_compatible:
         logger.error(f"CRITICAL COMPATIBILITY ERROR: {error}")
         sys.exit(1)
-    logger.info("Dagster API compatibility verified.")
+    logger.info("✅ Dagster API compatibility verified")
 
     # 5. Apply Monkey-Patches
     logger.info("Applying authentication patches...")
@@ -58,47 +66,53 @@ def main():
         logger.critical(f"Fatal error during patching: {e}")
         sys.exit(1)
 
-    # 6. Database and Admin Bootstrap
-    logger.info("Ensuring database state...")
-    admin_pw = bootstrap_db()
-    if admin_pw:
-        show_security_banner(admin_pw)
+    # 6. Database Bootstrap (if using SQLite)
+    if config.AUTH_BACKEND == "sqlite":
+        logger.info("Initializing SQLite backend...")
+        try:
+            from dagster_authkit.auth.backends.sqlite import SQLiteAuthBackend
 
-    # 7. Delegate to Dagster CLI with Fallback Protection
-    # We try both the modern 'dagster_webserver' and the legacy 'dagit' paths.
-    logger.info("Patches active. Delegating to original Dagster CLI.")
+            # Backend initialization will create DB + admin if needed
+            backend = SQLiteAuthBackend(config.__dict__)
+            logger.info("✅ Database ready")
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+            # Continue anyway - user might fix it later
+
+    # 7. Delegate to Dagster CLI
+    logger.info("Patches active. Delegating to Dagster webserver...")
 
     dagster_cli_main = None
 
-    # Check current PYTHONPATH for debugging
-    logger.debug(f"Python Path: {sys.path}")
-
     try:
-        # Standard modern path (Dagster 1.10+)
+        # Modern path (Dagster 1.10+)
         from dagster_webserver.cli import main as webserver_main
 
         dagster_cli_main = webserver_main
+        logger.debug("Using dagster_webserver.cli")
     except ImportError as e:
         logger.warning(f"Could not find 'dagster_webserver.cli': {e}")
+
         try:
-            # Fallback for older versions
+            # Legacy fallback (Dagster < 1.10)
             from dagit.cli import main as dagit_main
 
             dagster_cli_main = dagit_main
+            logger.debug("Using dagit.cli (legacy)")
         except ImportError:
-            logger.error("CRITICAL: Dagster webserver CLI not found in current environment.")
+            logger.error("CRITICAL: Dagster webserver CLI not found")
             print("\n" + "!" * 60)
             print("ERROR: Dagster webserver is not installed or not accessible.")
             print("Make sure you are in the correct environment and run:")
-            print("pip install dagster-webserver")
+            print("    pip install dagster dagster-webserver")
             print("!" * 60 + "\n")
             sys.exit(1)
 
-    # Modify process name to ensure Click/Dagster commands behave correctly
-    sys.argv[0] = "dagster-webserver"
+    # Modify process name for Click compatibility
+    sys.argv[0] = "dagster"
 
     try:
-        logger.info("🚀 Launching Dagster core engine...")
+        logger.info("🚀 Launching Dagster webserver...")
         dagster_cli_main()
     except Exception as e:
         logger.critical(f"Unexpected crash in delegated process: {e}")

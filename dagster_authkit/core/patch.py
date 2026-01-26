@@ -1,16 +1,17 @@
 """
 Dagster Monkey-Patching Module - "Native Infiltration" Edition
 
-Injects the user profile as a native item within the Dagster utility group,
-replicating internal classes and behavior to ensure a perfect visual fit.
+Injects user profile into Dagster sidebar with native styling.
+Supports collapsed/expanded sidebar states.
 """
 
-import logging
 import json
-from typing import Callable
+import logging
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
+
+from dagster_authkit.auth.backends.base import AuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ def apply_patches() -> None:
             return middlewares
 
         webserver_module.DagsterWebserver.build_middleware = patched_build_middleware
+        logger.info("✅ Middleware patched")
     except Exception as e:
         logger.error(f"❌ Middleware patch failed: {e}")
 
@@ -59,6 +61,7 @@ def apply_patches() -> None:
             return routes_list
 
         webserver_module.DagsterWebserver.build_routes = patched_build_routes
+        logger.info("✅ Routes patched")
     except Exception as e:
         logger.error(f"❌ Routes patch failed: {e}")
 
@@ -70,6 +73,7 @@ def apply_patches() -> None:
             return _inject_ui_logic(self, request)
 
         webserver_module.DagsterWebserver.index_html_endpoint = patched_index_html_wrapper
+        logger.info("✅ UI patched")
     except Exception as e:
         logger.error(f"❌ UI patch failed: {e}")
 
@@ -77,23 +81,26 @@ def apply_patches() -> None:
 def _inject_ui_logic(self, request: Request):
     response = original_index_html(self, request)
 
-    # 1. Resgate seguro dos dados
-    user = getattr(request.state, "user", {})
+    # Get user from request state (AuthUser object)
+    user = getattr(request.state, "user", None)
 
-    # 2. Lógica de Fallback Robusta no Python
-    username = user.get("username") or "guest"
-    full_name = user.get("full_name") or username.capitalize()
-    email = user.get("email") or ""
-    roles = user.get("roles", ["viewer"])
-    role_display = roles[0].upper() if roles else "VIEWER"
+    # If no user, skip injection
+    if not user or not isinstance(user, AuthUser):
+        return response
+
+    # Extract user data
+    username = user.username
+    full_name = user.full_name or username.capitalize()
+    email = user.email or ""
+    role = user.role.name  # ADMIN, EDITOR, LAUNCHER, VIEWER
     initial = (full_name[0] if full_name else username[0]).upper()
 
-    # 3. Serialização limpa para o JS
+    # Serialize for JavaScript
     user_data_json = json.dumps(
         {
             "full_name": full_name,
             "email": email,
-            "role": role_display,
+            "role": role,
             "initial": initial,
             "has_email": bool(email),
         }
@@ -101,6 +108,48 @@ def _inject_ui_logic(self, request: Request):
 
     injection = rf"""
     <style>
+        /* ===== USER MENU CONTAINER ===== */
+        #authkit-nav-item {{
+            position: relative;
+        }}
+
+        /* ===== AVATAR CIRCLE ===== */
+        .authkit-avatar-circle {{
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            font-size: 14px;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }}
+
+        /* ===== USER LABEL (hidden when collapsed) ===== */
+        .authkit-label {{
+            flex: 1;
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 14px;
+            transition: opacity 0.2s, width 0.2s;
+        }}
+
+        /* When sidebar is collapsed (detected by parent width) */
+        @media (max-width: 80px) {{
+            .authkit-label {{
+                opacity: 0;
+                width: 0;
+                overflow: hidden;
+            }}
+        }}
+
+        /* ===== POPOVER ===== */
         .authkit-popover {{
             display: none;
             position: fixed;
@@ -112,27 +161,23 @@ def _inject_ui_logic(self, request: Request):
             border: 1px solid rgba(255, 255, 255, 0.15);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             z-index: 10000;
+            transition: all 0.2s;
         }}
+
         .authkit-popover.active {{
             display: block;
         }}
+
+        /* Popover positioning when sidebar is collapsed */
+        .sidebar-collapsed .authkit-popover {{
+            left: 60px;
+        }}
+
         .authkit-header {{
             padding: 12px 16px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }}
-        .authkit-avatar-circle {{
-            width: 20px;
-            height: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            color: white;
-            font-size: 10px;
-            flex-shrink: 0;
-        }}
+
         .authkit-item {{
             padding: 10px 16px;
             display: block;
@@ -140,9 +185,35 @@ def _inject_ui_logic(self, request: Request):
             text-decoration: none;
             font-size: 14px;
             transition: background-color 0.2s;
+            cursor: pointer;
         }}
+
         .authkit-item:hover {{
             background-color: rgba(255, 255, 255, 0.05);
+        }}
+
+        /* ===== TRIGGER BUTTON ===== */
+        #authkit-trigger {{
+            background: transparent;
+            border: none;
+            padding: 0;
+            width: 100%;
+            cursor: pointer;
+            color: inherit;
+        }}
+
+        .authkit-box-proxy {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            transition: all 0.2s;
+        }}
+
+        /* Hover effect */
+        #authkit-trigger:hover .authkit-box-proxy {{
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
         }}
     </style>
 
@@ -152,24 +223,25 @@ def _inject_ui_logic(self, request: Request):
             
             function infiltrate() {{
                 const groups = document.querySelectorAll('div[class*="MainNavigation_group"]');
-                const targetGroup = groups[groups.length - 1];
+                if (groups.length === 0) return;
                 
+                const targetGroup = groups[groups.length - 1];
                 if (!targetGroup || document.getElementById('authkit-nav-item')) return;
 
+                // Create menu container
                 const itemContainer = document.createElement('div');
                 itemContainer.id = 'authkit-nav-item';
                 
+                // Clone classes from sibling for consistency
                 const sibling = targetGroup.querySelector('div[class*="itemContainer"]');
                 if (sibling) itemContainer.className = sibling.className;
 
-                // HTML com concatenação correta (sem template strings problemáticas)
+                // Build HTML (using string concatenation to avoid template literal issues)
                 itemContainer.innerHTML = 
-                    '<button id="authkit-trigger" style="background:transparent; border:none; padding:0; width:100%; cursor:pointer; color:inherit;">' +
-                        '<div class="authkit-box-proxy" style="display:flex; align-items:center; gap:8px; padding:8px 12px;">' +
+                    '<button id="authkit-trigger">' +
+                        '<div class="authkit-box-proxy">' +
                             '<div class="authkit-avatar-circle">' + u.initial + '</div>' +
-                            '<div class="authkit-label" style="flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px;">' +
-                                u.full_name +
-                            '</div>' +
+                            '<div class="authkit-label">' + u.full_name + '</div>' +
                         '</div>' +
                     '</button>' +
                     '<div class="authkit-popover" id="authkit-popover">' +
@@ -181,14 +253,16 @@ def _inject_ui_logic(self, request: Request):
                         '<a href="/auth/logout" class="authkit-item" style="color:#ff6b6b;">Sign Out</a>' +
                     '</div>';
 
+                // Insert at top of group
                 targetGroup.prepend(itemContainer);
 
-                // Clone de estilos do botão de Settings para manter consistência visual
+                // Clone styles from Settings button
                 const settingsBtn = targetGroup.querySelector('button[class*="itemButton"]');
                 if (settingsBtn) {{
                     const trigger = document.getElementById('authkit-trigger');
                     trigger.className = settingsBtn.className;
-                    // Copiar classes do container interno para alinhamento perfeito
+                    
+                    // Copy internal box classes for perfect alignment
                     const boxProxy = itemContainer.querySelector('.authkit-box-proxy');
                     const originalBox = settingsBtn.querySelector('div[class*="Box_"]');
                     if (originalBox) {{
@@ -197,30 +271,41 @@ def _inject_ui_logic(self, request: Request):
                 }}
 
                 // Event handlers
+                setupEventHandlers();
+                
+                // Detect sidebar collapse/expand
+                watchSidebarState();
+            }}
+
+            function setupEventHandlers() {{
                 const trigger = document.getElementById('authkit-trigger');
                 const popover = document.getElementById('authkit-popover');
                 
+                if (!trigger || !popover) return;
+
+                // Toggle popover
                 trigger.addEventListener('click', (e) => {{
                     e.stopPropagation();
                     e.preventDefault();
                     popover.classList.toggle('active');
                 }});
                 
-                // Fechar popover ao clicar fora
+                // Close on outside click
                 document.addEventListener('click', (e) => {{
-                    if (popover && !itemContainer.contains(e.target)) {{
+                    const container = document.getElementById('authkit-nav-item');
+                    if (popover && container && !container.contains(e.target)) {{
                         popover.classList.remove('active');
                     }}
                 }});
                 
-                // Fechar com Escape key
+                // Close on Escape
                 document.addEventListener('keydown', (e) => {{
                     if (e.key === 'Escape' && popover) {{
                         popover.classList.remove('active');
                     }}
                 }});
                 
-                // Fechar ao navegar (clicar em links do popover)
+                // Close on logout click
                 popover.querySelectorAll('a').forEach(link => {{
                     link.addEventListener('click', () => {{
                         popover.classList.remove('active');
@@ -228,23 +313,49 @@ def _inject_ui_logic(self, request: Request):
                 }});
             }}
 
-            // Executar quando o DOM estiver pronto
+            function watchSidebarState() {{
+                // Watch for sidebar collapse/expand
+                const sidebar = document.querySelector('[class*="LeftNav_"]');
+                if (!sidebar) return;
+
+                const observer = new ResizeObserver(entries => {{
+                    for (let entry of entries) {{
+                        const width = entry.contentRect.width;
+                        const popover = document.getElementById('authkit-popover');
+                        
+                        if (popover) {{
+                            if (width < 100) {{
+                                // Collapsed - adjust popover position
+                                popover.classList.add('sidebar-collapsed');
+                            }} else {{
+                                // Expanded
+                                popover.classList.remove('sidebar-collapsed');
+                            }}
+                        }}
+                    }}
+                }});
+
+                observer.observe(sidebar);
+            }}
+
+            // Initialize
             if (document.readyState === 'loading') {{
                 document.addEventListener('DOMContentLoaded', infiltrate);
             }} else {{
                 infiltrate();
             }}
             
-            // Observar mudanças no DOM (sidebar pode ser carregada dinamicamente)
+            // Watch for DOM changes (sidebar might load later)
             const observer = new MutationObserver(infiltrate);
             observer.observe(document.body, {{ childList: true, subtree: true }});
             
-            // Fallback: tentar novamente após 500ms se não encontrou
+            // Fallback: retry after delay
             setTimeout(infiltrate, 500);
         }})();
     </script>
     """
 
+    # Inject into HTML
     if hasattr(response.body, "decode"):
         html = response.body.decode("utf-8")
     else:
@@ -252,6 +363,7 @@ def _inject_ui_logic(self, request: Request):
 
     html = html.replace("</body>", f"{injection}</body>")
 
+    # Update headers
     headers = dict(response.headers)
     headers.pop("content-length", None)
     headers.pop("etag", None)
@@ -260,6 +372,7 @@ def _inject_ui_logic(self, request: Request):
 
 
 def verify_patches() -> bool:
+    """Verify patches were applied successfully."""
     try:
         import dagster_webserver.webserver as webserver_module
 

@@ -1,7 +1,8 @@
 """
-Authentication Middleware - Enterprise RBAC Version
-Refined for Dagster+ hierarchy: Viewer < Launcher < Editor < Admin.
-Includes schema-compliant GraphQL error reporting (PythonError extensions).
+Authentication Middleware - Community RBAC Version
+
+Implements Dagster+ role hierarchy: VIEWER < LAUNCHER < EDITOR < ADMIN.
+Includes GraphQL mutation detection and schema-compliant error responses.
 """
 
 import json
@@ -13,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from dagster_authkit.auth.backends.base import Role, AuthUser
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import validate_session
 from dagster_authkit.utils.audit import log_access_control
@@ -22,123 +24,200 @@ logger = logging.getLogger(__name__)
 
 
 class DagsterAuthMiddleware(BaseHTTPMiddleware):
+    """
+    Authentication and RBAC middleware for Dagster.
+
+    Features:
+    - Session validation (signed cookies)
+    - GraphQL mutation detection
+    - Role-based access control (4 levels)
+    - Audit logging
+    - Dagster-native error responses
+    """
+
     PUBLIC_PATHS = {"/auth/login", "/auth/logout", "/auth/process", "/auth/health", "/auth/metrics"}
+
     ADMIN_PATHS_PREFIXES = ("/admin", "/settings", "/config")
     WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
-    # Official Dagster+ Hierarchical Levels
-    ROLE_LEVELS = {"viewer": 10, "launcher": 20, "editor": 30, "admin": 40}
+    # GraphQL mutation → required role mapping
+    MUTATION_ROLE_MAP = {
+        # LAUNCHER (20) - Execution operations
+        "launchRun": Role.LAUNCHER,
+        "terminateRun": Role.LAUNCHER,
+        "reexecuteRun": Role.LAUNCHER,
+        "cancelRun": Role.LAUNCHER,
+        "deletePipelineRun": Role.LAUNCHER,
+        # EDITOR (30) - Configuration operations
+        "startSchedule": Role.EDITOR,
+        "stopRunningSchedule": Role.EDITOR,
+        "startSensor": Role.EDITOR,
+        "stopSensor": Role.EDITOR,
+        "wipeAssets": Role.EDITOR,
+        "materializeAssets": Role.EDITOR,
+        "launchPartitionBackfill": Role.EDITOR,
+        # ADMIN (40) - Dangerous operations
+        "reloadRepositoryLocation": Role.ADMIN,
+        "shutdownRepositoryLocation": Role.ADMIN,
+    }
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
 
+        # 1. Skip authentication for public paths
         if self._is_public_path(path):
             response = await call_next(request)
             return SecurityHardening.set_security_headers(response)
 
-        user_data = self._get_authenticated_user(request)
-        if not user_data:
+        # 2. Authenticate user
+        user = self._get_authenticated_user(request)
+        if not user:
             return RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
 
-        username = user_data.get("username", "unknown")
-        roles = user_data.get("roles", ["viewer"])
-
-        # ========================================
-        # GRAPHQL RBAC (The "Launcher" Logic)
-        # ========================================
+        # 3. GraphQL RBAC
         if path == "/graphql" and method == "POST":
             body = await request.body()
             graphql_data = self._parse_json(body)
             query = graphql_data.get("query", "")
 
             if self._is_mutation(query):
-                field_name = self._extract_graphql_field_name(query)
-                user_max_level = max([self.ROLE_LEVELS.get(r.lower(), 10) for r in roles])
+                mutation_name = self._extract_graphql_field_name(query)
+                required_role = self.MUTATION_ROLE_MAP.get(mutation_name)
 
-                # 1. Define Execution vs Configuration operations
-                # Based on Dagster+ Official Permissions
-                execution_ops = {"launchRun", "terminateRun", "reexecuteRun", "cancelRun"}
+                if required_role:
+                    # Check if user has sufficient permissions
+                    if not user.can(required_role):
+                        logger.warning(
+                            f"RBAC BLOCK: {user.username} (role={user.role.name}) "
+                            f"attempted {mutation_name} (requires {required_role.name})"
+                        )
 
-                # Determine required level
-                if field_name in execution_ops:
-                    required_level = self.ROLE_LEVELS["launcher"]  # 20
-                    required_role = "launcher"
-                else:
-                    required_level = self.ROLE_LEVELS["editor"]  # 30
-                    required_role = "editor"
+                        # Audit log
+                        log_access_control(
+                            user.username,
+                            "POST",
+                            "/graphql",
+                            False,
+                            roles=[user.role.name],
+                            reason=f"REQUIRES_{required_role.name}",
+                        )
 
-                # 2. Block if user level is insufficient
-                if user_max_level < required_level:
-                    return self._generate_dagster_error_response(
-                        username, roles, field_name, required_role
-                    )
+                        return self._generate_dagster_error_response(
+                            user, mutation_name, required_role
+                        )
+                    else:
+                        # Log successful access
+                        log_access_control(
+                            user.username,
+                            "POST",
+                            "/graphql",
+                            True,
+                            roles=[user.role.name],
+                            reason=f"MUTATION_{mutation_name}",
+                        )
 
-            # Re-inject body for the Dagster webserver process
+            # Re-inject body for downstream consumption
             async def receive():
                 return {"type": "http.request", "body": body}
 
             request = Request(request.scope, receive=receive)
 
+        # 4. REST RBAC (for non-GraphQL paths)
         else:
-            # REST RBAC
-            allowed, reason = self._check_rest_rbac(path, method, roles)
+            allowed, reason = self._check_rest_rbac(path, method, user)
             if not allowed:
-                return self._forbidden_html_response(username, roles, path, method, reason)
+                log_access_control(
+                    user.username, method, path, False, roles=[user.role.name], reason=reason
+                )
+                return self._forbidden_html_response(user, path, method, reason)
 
-        request.state.user = user_data
+        # 5. Attach user to request state
+        request.state.user = user
+
+        # 6. Continue to Dagster
         response = await call_next(request)
         return SecurityHardening.set_security_headers(response)
 
+    # ========================================
+    # AUTHENTICATION
+    # ========================================
+
     def _is_public_path(self, path: str) -> bool:
+        """Check if path is public (no auth required)."""
         return path in self.PUBLIC_PATHS or path.startswith(("/auth/", "/static/"))
 
-    def _get_authenticated_user(self, request: Request) -> Optional[dict]:
+    def _get_authenticated_user(self, request: Request) -> Optional[AuthUser]:
+        """
+        Validate session and return AuthUser.
+
+        Returns:
+            AuthUser if authenticated, None otherwise
+        """
         token = request.cookies.get(config.SESSION_COOKIE_NAME)
-        return validate_session(token) if token else None
+        if not token:
+            return None
+
+        # Validate session (returns dict)
+        user_data = validate_session(token)
+        if not user_data:
+            return None
+
+        # Convert dict → AuthUser
+        try:
+            return AuthUser.from_dict(user_data)
+        except Exception as e:
+            logger.error(f"Failed to deserialize user from session: {e}")
+            return None
+
+    # ========================================
+    # GRAPHQL RBAC
+    # ========================================
 
     def _parse_json(self, body: bytes) -> dict:
+        """Parse JSON body safely."""
         try:
             return json.loads(body.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
 
     def _is_mutation(self, query: str) -> bool:
-        # Check first 100 chars to avoid regex on massive queries
+        """Check if GraphQL query is a mutation."""
+        # Check first 100 chars for performance
         return "mutation" in query.lower()[:100]
 
     def _extract_graphql_field_name(self, query: str) -> str:
         """
-        Extracts the first field inside the mutation block.
-        mutation X { launchRun(...) } -> 'launchRun'
+        Extract mutation name from GraphQL query.
+
+        Examples:
+            mutation { launchRun(...) } → "launchRun"
+            mutation StartRun { launchRun(...) } → "launchRun"
         """
         match = re.search(r"mutation[^{]*\{\s*(\w+)", query)
         return match.group(1) if match else "unknown"
 
-    def _generate_dagster_error_response(self, username, roles, field_name, required_role):
+    def _generate_dagster_error_response(
+        self, user: AuthUser, mutation_name: str, required_role: Role
+    ) -> Response:
         """
-        Returns a PythonError extension payload.
-        This allows Dagster UI to show the error in its native inspector.
-        """
-        log_access_control(
-            username,
-            "POST",
-            "/graphql",
-            False,
-            roles=roles,
-            reason=f"REQUIRES_{required_role.upper()}",
-        )
+        Generate Dagster-native error response (PythonError format).
 
-        msg = f"Permission Denied: User '{username}' requires '{required_role}' role for operation '{field_name}'."
+        This ensures the error appears in Dagster UI's native inspector.
+        """
+        msg = (
+            f"Permission Denied: User '{user.username}' (role: {user.role.name}) "
+            f"requires '{required_role.name}' role for operation '{mutation_name}'."
+        )
 
         response_payload = {
             "data": {
-                field_name: {
+                mutation_name: {
                     "__typename": "PythonError",
                     "message": msg,
                     "stack": [
-                        f'  File "dagster_authkit/core/middleware.py", line 110, in check_rbac\n',
-                        f'    raise PermissionError("Insufficient permissions: {required_role} level required")\n',
+                        '  File "dagster_authkit/core/middleware.py", line 145, in dispatch\n',
+                        f'    raise PermissionError("Insufficient permissions: {required_role.name} required")\n',
                     ],
                     "cls_name": "PermissionError",
                     "cause": None,
@@ -148,7 +227,7 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
             "errors": [
                 {
                     "message": msg,
-                    "path": [field_name],
+                    "path": [mutation_name],
                     "extensions": {
                         "code": "FORBIDDEN",
                         "errorInfo": {"message": msg, "stack": [], "cls_name": "PermissionError"},
@@ -158,35 +237,94 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
         }
 
         return Response(
-            content=json.dumps(response_payload), status_code=200, media_type="application/json"
+            content=json.dumps(response_payload),
+            status_code=200,  # GraphQL returns 200 even for errors
+            media_type="application/json",
         )
 
-    def _check_rest_rbac(self, path, method, roles):
-        user_max_level = max([self.ROLE_LEVELS.get(r.lower(), 10) for r in roles])
+    # ========================================
+    # REST RBAC
+    # ========================================
 
-        # Admin restricted paths
-        if any(path.startswith(p) for p in self.ADMIN_PATHS_PREFIXES):
-            if user_max_level < self.ROLE_LEVELS["admin"]:
+    def _check_rest_rbac(self, path: str, method: str, user: AuthUser) -> tuple:
+        """
+        Check REST RBAC rules.
+
+        Returns:
+            (allowed: bool, reason: str)
+        """
+        # Admin-only paths
+        if any(path.startswith(prefix) for prefix in self.ADMIN_PATHS_PREFIXES):
+            if not user.can(Role.ADMIN):
                 return False, "ADMIN_REQUIRED"
 
-        # General write protection
+        # Write operations require EDITOR
         if method in self.WRITE_METHODS:
-            if user_max_level < self.ROLE_LEVELS["editor"]:
+            if not user.can(Role.EDITOR):
                 return False, "EDITOR_REQUIRED"
 
         return True, ""
 
-    def _forbidden_html_response(self, username, roles, path, method, reason):
+    def _forbidden_html_response(
+        self, user: AuthUser, path: str, method: str, reason: str
+    ) -> Response:
+        """Generate HTML 403 Forbidden page."""
         html = f"""
+        <!DOCTYPE html>
         <html>
-            <body style='font-family:sans-serif; background-color: #0f111a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0;'>
-                <div style='text-align: center; border: 1px solid #333; padding: 40px; border-radius: 12px; background: #1a1d29;'>
-                    <h1 style='color: #ff6b6b;'>🔒 403 Forbidden</h1>
-                    <p style='color: #888;'>User <strong>{username}</strong> does not have permission to {method} on {path}.</p>
-                    <p style='font-size: 12px; color: #555;'>Reason: {reason}</p>
-                    <a href='/' style='color: #667eea; text-decoration: none;'>Return to Dashboard</a>
-                </div>
-            </body>
+        <head>
+            <title>403 Forbidden</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                    background-color: #0f111a;
+                    color: white;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                }}
+                .container {{
+                    text-align: center;
+                    border: 1px solid #333;
+                    padding: 40px;
+                    border-radius: 12px;
+                    background: #1a1d29;
+                    max-width: 500px;
+                }}
+                h1 {{
+                    color: #ff6b6b;
+                    margin: 0 0 20px 0;
+                }}
+                .info {{
+                    color: #888;
+                    margin: 10px 0;
+                }}
+                .detail {{
+                    font-size: 12px;
+                    color: #555;
+                    margin-top: 20px;
+                }}
+                a {{
+                    color: #667eea;
+                    text-decoration: none;
+                    margin-top: 20px;
+                    display: inline-block;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔒 403 Forbidden</h1>
+                <p class="info">
+                    User <strong>{user.username}</strong> (role: <strong>{user.role.name}</strong>)
+                    does not have permission to <strong>{method}</strong> on <strong>{path}</strong>.
+                </p>
+                <p class="detail">Reason: {reason}</p>
+                <a href="/">← Return to Dashboard</a>
+            </div>
+        </body>
         </html>
         """
         return Response(content=html, status_code=403, media_type="text/html")

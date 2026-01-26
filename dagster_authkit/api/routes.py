@@ -10,13 +10,14 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
 
+from dagster_authkit.auth.backends.base import AuthUser
 from dagster_authkit.auth.rate_limiter import (
     is_rate_limited,
     record_login_attempt,
     reset_rate_limit,
 )
 from dagster_authkit.auth.security import SecurityHardening
-from dagster_authkit.auth.session import create_session
+from dagster_authkit.auth.session import create_session, validate_session
 from dagster_authkit.core.registry import get_backend
 from dagster_authkit.utils.audit import log_login_attempt, log_logout, log_rate_limit_violation
 from dagster_authkit.utils.config import config
@@ -219,7 +220,6 @@ async def process_login(request: Request) -> Response:
     if is_limited:
         logger.warning(f"Rate limit exceeded for '{username}' ({attempts} attempts)")
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({attempts} attempts)")
-
         log_rate_limit_violation(username, client_ip, attempts)
 
         return RedirectResponse(
@@ -233,7 +233,7 @@ async def process_login(request: Request) -> Response:
 
     try:
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
-        user_data = backend.authenticate(username, password)
+        user = backend.authenticate(username, password)  # Returns AuthUser or None
 
     except Exception as e:
         logger.error(f"Backend error during authentication: {e}")
@@ -247,7 +247,7 @@ async def process_login(request: Request) -> Response:
     # 3. Check authentication result
     # ========================================
 
-    if not user_data:
+    if not user:
         # Invalid credentials
         logger.info(f"Failed login attempt for '{username}'")
 
@@ -265,7 +265,7 @@ async def process_login(request: Request) -> Response:
     # 4. Login successful!
     # ========================================
 
-    logger.info(f"Successful login: '{username}' with roles {user_data.get('roles')}")
+    logger.info(f"Successful login: '{user.username}' with role {user.role.name}")
 
     # Reset rate limit counter
     reset_rate_limit(username)
@@ -273,8 +273,8 @@ async def process_login(request: Request) -> Response:
     # Audit log
     log_login_attempt(username, True, client_ip)
 
-    # Create session
-    session_token = create_session(user_data)
+    # Create session (convert AuthUser → dict for signing)
+    session_token = create_session(user.to_dict())
 
     # Audit session creation
     from dagster_authkit.utils.audit import get_audit_logger
@@ -308,8 +308,6 @@ async def logout(request: Request) -> Response:
         Redirect to login
     """
     # Get username from session (if exists)
-    from dagster_authkit.auth.session import validate_session
-
     session_token = request.cookies.get(config.SESSION_COOKIE_NAME)
     username = "unknown"
 
