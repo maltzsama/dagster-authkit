@@ -5,7 +5,7 @@ import getpass
 from pathlib import Path
 
 from dagster_authkit.auth.backends.base import Role
-from dagster_authkit.auth.backends.sqlite import SQLiteAuthBackend
+from dagster_authkit.auth.backends.sql import SQLiteAuthBackend
 
 
 def handle_user_management():
@@ -247,6 +247,7 @@ def delete_user_command(args):
     else:
         print(f"❌ Failed to delete user (user not found)")
         return 1
+
 
 def list_permissions_command(args):
     """List all mutation permissions by role."""

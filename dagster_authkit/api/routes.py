@@ -2,10 +2,10 @@
 Authentication Routes
 
 Login/logout endpoints + HTML pages.
+Matched with the finalized Peewee SQL Backend and stdout Audit Logging.
 """
 
 import logging
-
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
@@ -22,31 +22,25 @@ from dagster_authkit.utils.audit import (
     log_login_attempt,
     log_logout,
     log_rate_limit_violation,
-    get_audit_logger
+    log_audit_event,
 )
 from dagster_authkit.utils.config import config
 
 logger = logging.getLogger(__name__)
 
+def _get_client_ip(request: Request) -> str:
+    """Helper to get real IP behind K8s Ingress (X-Forwarded-For)."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 async def login_page(request: Request) -> Response:
-    """
-    GET /auth/login - Displays login page.
-
-    Args:
-        request: Starlette Request
-
-    Returns:
-        HTML Response with login form
-    """
-    # Get 'next' parameter for redirect after login
+    """GET /auth/login - Displays login page."""
     next_url = request.query_params.get("next", "/")
-
-    # Validate next URL (prevent open redirect)
     if not SecurityHardening.validate_redirect_url(next_url):
         next_url = "/"
 
-    # Get error message (if any)
     error = request.query_params.get("error", "")
 
     html = f"""
@@ -185,67 +179,49 @@ async def login_page(request: Request) -> Response:
     </body>
     </html>
     """
-
     return HTMLResponse(content=html)
 
-
 async def process_login(request: Request) -> Response:
-    """POST /auth/process - Processes login with strict auditing."""
+    """POST /auth/process - Authenticates and creates session."""
     form = await request.form()
-    username = SecurityHardening.sanitize_username(form.get("username", "").strip())
-    password = form.get("password", "")
-    next_url = form.get("next", "/")
+    username = SecurityHardening.sanitize_username(str(form.get("username", "")).strip())
+    password = str(form.get("password", ""))
+    next_url = str(form.get("next", "/"))
 
     if not SecurityHardening.validate_redirect_url(next_url):
         next_url = "/"
 
-    client_ip = request.client.host if request.client else None
+    client_ip = _get_client_ip(request)
 
     # 1. Rate Limiting Check
     is_limited, attempts = is_rate_limited(username)
     if is_limited:
-        logger.warning(f"Rate limit exceeded for '{username}' ({attempts} attempts)")
-        # RESTORED: Vital for security auditing and Fail2Ban integration
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({attempts} attempts)")
         log_rate_limit_violation(username, client_ip, attempts)
+        return RedirectResponse(url=f"/auth/login?next={next_url}&error=Too+many+attempts.", status_code=302)
 
-        return RedirectResponse(
-            url=f"/auth/login?next={next_url}&error=Too+many+failed+attempts.+Try+again+later.",
-            status_code=302,
-        )
-
-    # 2. Backend Authentication
+    # 2. Backend Call (Peewee / SQL)
     try:
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
         user = backend.authenticate(username, password)
     except Exception as e:
-        logger.error(f"Backend error during authentication: {e}")
+        logger.error(f"Auth Backend Error: {e}")
         log_login_attempt(username, False, client_ip, "BACKEND_ERROR")
-        return RedirectResponse(
-            url=f"/auth/login?next={next_url}&error=Authentication+system+error.",
-            status_code=302
-        )
+        return RedirectResponse(url=f"/auth/login?next={next_url}&error=System+error.", status_code=302)
 
-    # 3. Handle Failure
+    # 3. Validation
     if not user:
-        logger.info(f"Failed login attempt for '{username}'")
         record_login_attempt(username)
         log_login_attempt(username, False, client_ip, "INVALID_CREDENTIALS")
-        return RedirectResponse(
-            url=f"/auth/login?next={next_url}&error=Invalid+username+or+password.",
-            status_code=302
-        )
+        return RedirectResponse(url=f"/auth/login?next={next_url}&error=Invalid+credentials.", status_code=302)
 
-    # 4. Success - Session and Logging
-    logger.info(f"Successful login: '{user.username}' (role: {user.role.name})")
+    # 4. Success & Session Creation
     reset_rate_limit(username)
     log_login_attempt(username, True, client_ip)
 
-    # v1.0 Orchestrator call
     session_token = sessions.create(user.to_dict())
 
-    # RESTORED: Session creation audit
-    get_audit_logger().session_created(username, session_token[:16])
+    log_audit_event("SESSION_CREATED", username, session_id=session_token[:16], ip=client_ip)
 
     response = RedirectResponse(url=next_url, status_code=302)
     response.set_cookie(
@@ -258,21 +234,19 @@ async def process_login(request: Request) -> Response:
     )
     return response
 
-
 async def logout(request: Request) -> Response:
-    """GET /auth/logout - Invalidate session and log event."""
+    """GET /auth/logout - Revokes session."""
     session_token = request.cookies.get(config.SESSION_COOKIE_NAME)
     username = "unknown"
 
     if session_token:
-        # Use v1.0 orchestrator to identify user
         user_data = sessions.validate(session_token)
         if user_data:
             username = user_data.get("username", "unknown")
+            sessions.revoke(session_token)
 
-    client_ip = request.client.host if request.client else None
+    client_ip = _get_client_ip(request)
     log_logout(username, client_ip)
-    logger.info(f"User '{username}' logged out")
 
     response = RedirectResponse(url="/auth/login", status_code=302)
     response.delete_cookie(
@@ -283,7 +257,6 @@ async def logout(request: Request) -> Response:
     )
     return response
 
-
 def create_auth_routes() -> Router:
     """
     Creates router with authentication routes.
@@ -291,13 +264,8 @@ def create_auth_routes() -> Router:
     Returns:
         Starlette Router with routes /login, /logout, /process
     """
-    routes = [
+    return Router(routes=[
         Route("/login", login_page, methods=["GET"]),
         Route("/process", process_login, methods=["POST"]),
         Route("/logout", logout, methods=["GET"]),
-    ]
-
-    router = Router(routes=routes)
-    logger.info("Auth routes created: /login, /logout, /process")
-
-    return router
+    ])

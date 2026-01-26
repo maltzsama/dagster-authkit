@@ -255,7 +255,7 @@ class AuthUser:
         """
         return {
             "username": self.username,
-            "role": self.role.name,  # Store as string (ADMIN, EDITOR, etc)
+            "role": self.role.name,
             "email": self.email,
             "full_name": self.full_name,
         }
@@ -263,17 +263,19 @@ class AuthUser:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AuthUser":
         """
-        Create AuthUser from dict (for session deserialization).
-
-        Args:
-            data: Dict with username, role, email, full_name
-
-        Returns:
-            AuthUser instance
+        Create AuthUser from dict.
+        Robust enough to handle both String names and Integer values.
         """
+        raw_role = data["role"]
+
+        if isinstance(raw_role, str):
+            resolved_role = Role[raw_role]
+        else:
+            resolved_role = Role(raw_role)
+
         return cls(
             username=data["username"],
-            role=Role[data["role"]],  # Convert string → Role enum
+            role=resolved_role,
             email=data.get("email", ""),
             full_name=data.get("full_name", ""),
         )

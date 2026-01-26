@@ -5,7 +5,7 @@ from .dummy import DummyAuthBackend
 
 # Optional backends (may require extras)
 try:
-    from .sqlite import SQLiteAuthBackend
+    from .sql import SQLiteAuthBackend
 except ImportError:
     SQLiteAuthBackend = None
 

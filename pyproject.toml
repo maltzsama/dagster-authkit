@@ -44,6 +44,7 @@ dependencies = [
     "starlette>=0.52.1",
     "itsdangerous>=2.2.0",
     "python-multipart>=0.0.22",
+    "peewee>=3.19.0",
 ]
 
 [project.optional-dependencies]

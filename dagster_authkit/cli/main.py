@@ -70,7 +70,7 @@ def main():
     if config.AUTH_BACKEND == "sqlite":
         logger.info("Initializing SQLite backend...")
         try:
-            from dagster_authkit.auth.backends.sqlite import SQLiteAuthBackend
+            from dagster_authkit.auth.backends.sql import SQLiteAuthBackend
 
             # Backend initialization will create DB + admin if needed
             backend = SQLiteAuthBackend(config.__dict__)

@@ -19,13 +19,23 @@ from dagster_authkit.utils.config import config
 
 logger = logging.getLogger(__name__)
 
+
 class DagsterAuthMiddleware(BaseHTTPMiddleware):
     # --- Configuration ---
-    PUBLIC_PATHS: frozenset[str] = frozenset({
-        "/auth/login", "/auth/logout", "/auth/process", "/auth/health", "/auth/metrics",
-    })
+    PUBLIC_PATHS: frozenset[str] = frozenset(
+        {
+            "/auth/login",
+            "/auth/logout",
+            "/auth/process",
+            "/auth/health",
+            "/auth/metrics",
+        }
+    )
 
-    PUBLIC_PREFIXES: tuple[str, ...] = ("/auth/", "/static/",)
+    PUBLIC_PREFIXES: tuple[str, ...] = (
+        "/auth/",
+        "/static/",
+    )
 
     WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
@@ -59,9 +69,13 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
                     if required_role and not user.can(required_role):
                         self._log_denied(user, mutation_name, required_role)
-                        return self._generate_dagster_error_response(user, mutation_name, required_role)
+                        return self._generate_dagster_error_response(
+                            user, mutation_name, required_role
+                        )
 
-            async def receive(): return {"type": "http.request", "body": body}
+            async def receive():
+                return {"type": "http.request", "body": body}
+
             request = Request(request.scope, receive=receive)
 
         # 3. REST RBAC
@@ -77,11 +91,13 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
     def _get_authenticated_user(self, request: Request) -> Optional[AuthUser]:
         token = request.cookies.get(config.SESSION_COOKIE_NAME)
-        if not token: return None
+        if not token:
+            return None
 
         # v1.0 CALL: Using the sessions singleton validate method
         user_data = sessions.validate(token)
-        if not user_data: return None
+        if not user_data:
+            return None
 
         try:
             return AuthUser.from_dict(user_data)
@@ -99,7 +115,7 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _extract_graphql_field_name(query: str) -> str:
         """v1.0 Robust Regex: Handles comments, aliases, and formatting."""
-        clean_query = re.sub(r'#.*', '', query)
+        clean_query = re.sub(r"#.*", "", query)
         pattern = r"mutation[^{]*\{\s*(?:[\w\d_]+\s*:\s*)?([\w\d_]+)"
         match = re.search(pattern, clean_query, re.IGNORECASE | re.DOTALL)
         return match.group(1) if match else "unknown"
@@ -107,12 +123,16 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _log_denied(user, action, role):
         logger.warning(f"RBAC DENIED: {user.username} (role: {user.role.name}) tried {action}")
-        log_access_control(user.username, "POST", "/graphql", False, [user.role.name], f"REQUIRES_{role.name}")
+        log_access_control(
+            user.username, "POST", "/graphql", False, [user.role.name], f"REQUIRES_{role.name}"
+        )
 
     @staticmethod
     def _parse_json(body: bytes) -> dict:
-        try: return json.loads(body.decode("utf-8"))
-        except: return {}
+        try:
+            return json.loads(body.decode("utf-8"))
+        except:
+            return {}
 
     @staticmethod
     def _generate_dagster_error_response(user, mutation, role) -> Response:
@@ -129,14 +149,12 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
                     "cls_name": "AccessControlError",
                 }
             },
-            "errors": [{"message": f"Access Denied: {role.name} required", "path": [mutation]}]
+            "errors": [{"message": f"Access Denied: {role.name} required", "path": [mutation]}],
         }
         return Response(content=json.dumps(payload), status_code=200, media_type="application/json")
 
     @staticmethod
-    def _forbidden_html_response(
-        user: AuthUser, path: str, method: str, reason: str
-    ) -> Response:
+    def _forbidden_html_response(user: AuthUser, path: str, method: str, reason: str) -> Response:
         """Generate HTML 403 response."""
         html = f"""
         <!DOCTYPE html>
@@ -181,8 +199,4 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
         </body>
         </html>
         """
-        return Response(
-            content=html,
-            status_code=403,
-            media_type="text/html"
-        )
+        return Response(content=html, status_code=403, media_type="text/html")

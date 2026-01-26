@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # --- Interfaces ---
 
+
 class SessionBackend(ABC):
     @abstractmethod
     def create(self, user_data: Dict[str, Any]) -> str: ...
@@ -24,11 +25,14 @@ class SessionBackend(ABC):
     @abstractmethod
     def revoke_all(self, username: str) -> int: ...
 
+
 # --- Implementations ---
+
 
 class RedisBackend(SessionBackend):
     def __init__(self, redis_url: str, max_age: int):
         import redis
+
         self.client = redis.from_url(redis_url, decode_responses=True)
         self.max_age = max_age
 
@@ -50,12 +54,14 @@ class RedisBackend(SessionBackend):
             self.client.delete(f"sess:{t}")
         return self.client.delete(key)
 
+
 class CookieBackend(SessionBackend):
     """Stateless but with versioning for global revocation."""
+
     def __init__(self, secret_key: str, max_age: int):
         self.serializer = URLSafeTimedSerializer(secret_key)
         self.max_age = max_age
-        self._versions: Dict[str, int] = {} # Reset on pod restart (K8s limitation)
+        self._versions: Dict[str, int] = {}  # Reset on pod restart (K8s limitation)
 
     def create(self, user_data: Dict[str, Any]) -> str:
         v = self._versions.get(user_data["username"], 1)
@@ -67,13 +73,16 @@ class CookieBackend(SessionBackend):
             if data.get("_v") != self._versions.get(data.get("username"), 1):
                 return None
             return data
-        except: return None
+        except:
+            return None
 
     def revoke_all(self, username: str) -> int:
         self._versions[username] = self._versions.get(username, 1) + 1
         return 1
 
+
 # --- The Orchestrator ---
+
 
 class SessionManager:
     def __init__(self):
@@ -95,5 +104,6 @@ class SessionManager:
 
     def revoke_all(self, username: str) -> int:
         return self.backend.revoke_all(username)
+
 
 sessions = SessionManager()
