@@ -46,15 +46,16 @@ class AuthConfig:
         self.RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("DAGSTER_AUTH_RATE_LIMIT_ATTEMPTS", "5"))
         self.RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DAGSTER_AUTH_RATE_LIMIT_WINDOW", "300"))
 
-        # LDAP settings (Maintained)
-        self.LDAP_SERVER_URI = os.getenv("LDAP_SERVER_URI", "ldap://localhost:389")
-        self.LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "dc=example,dc=com")
-        self.LDAP_BIND_DN = os.getenv("LDAP_BIND_DN")
-        self.LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD")
-        self.LDAP_USER_SEARCH_FILTER = os.getenv(
-            "LDAP_USER_SEARCH_FILTER", "(sAMAccountName={username})"
-        )
-        self.LDAP_USE_TLS = os.getenv("LDAP_USE_TLS", "true").lower() == "true"
+        # LDAP settings
+        self.DAGSTER_AUTH_LDAP_SERVER = os.getenv("DAGSTER_AUTH_LDAP_SERVER")
+        self.DAGSTER_AUTH_LDAP_BASE_DN = os.getenv("DAGSTER_AUTH_LDAP_BASE_DN")
+        self.DAGSTER_AUTH_LDAP_BIND_DN = os.getenv("DAGSTER_AUTH_LDAP_BIND_DN")
+        self.DAGSTER_AUTH_LDAP_BIND_PASSWORD = os.getenv("DAGSTER_AUTH_LDAP_BIND_PASSWORD")
+        self.DAGSTER_AUTH_LDAP_USER_FILTER = os.getenv("DAGSTER_AUTH_LDAP_USER_FILTER", "(uid={username})")
+        self.DAGSTER_AUTH_LDAP_USE_TLS = os.getenv("DAGSTER_AUTH_LDAP_USE_TLS", "false").lower() == "true"
+        self.DAGSTER_AUTH_LDAP_CA_CERT = os.getenv("DAGSTER_AUTH_LDAP_CA_CERT")
+        self.DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE = os.getenv("DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE")
+        self.DAGSTER_AUTH_LDAP_GROUP_PATTERN = os.getenv("DAGSTER_AUTH_LDAP_GROUP_PATTERN")
 
         # OAuth settings (Maintained)
         self.OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")

@@ -15,7 +15,7 @@ except ImportError:
     # This happens if 'peewee' is not installed in the environment
     PeeweeAuthBackend = None
 
-# Placeholder for future LDAP implementation
+# LDAP Backend (requires ldap3)
 try:
     from .ldap import LDAPAuthBackend
 except ImportError:
