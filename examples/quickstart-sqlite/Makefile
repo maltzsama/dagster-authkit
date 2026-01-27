@@ -6,7 +6,7 @@
 
 help:
 	@echo "╔════════════════════════════════════════════════════════╗"
-	@echo "║      Dagster AuthKit - SQLite Quickstart              ║"
+	@echo "║      Dagster AuthKit - SQLite Quickstart               ║"
 	@echo "╚════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "Quick Commands:"
