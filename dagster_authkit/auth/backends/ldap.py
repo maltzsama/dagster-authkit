@@ -7,27 +7,6 @@ Supports:
 - Any RFC 4511 compliant LDAP server
 
 Uses ldap3 (pure Python, thread-safe, cross-platform).
-
-Configuration via environment variables:
-    DAGSTER_AUTH_LDAP_SERVER=ldap://ldap.company.com:389
-    DAGSTER_AUTH_LDAP_BIND_DN=cn=readonly,dc=company,dc=com
-    DAGSTER_AUTH_LDAP_BIND_PASSWORD=secret
-    DAGSTER_AUTH_LDAP_BASE_DN=ou=users,dc=company,dc=com
-    DAGSTER_AUTH_LDAP_USER_FILTER=(uid={username})  # OpenLDAP
-    DAGSTER_AUTH_LDAP_USER_FILTER=(sAMAccountName={username})  # Active Directory
-
-    # Role mapping (choose one method):
-
-    # Method 1: Group pattern (RECOMMENDED)
-    DAGSTER_AUTH_LDAP_GROUP_PATTERN=cn=dagster-{role},ou=groups,dc=company,dc=com
-    # {role} will be replaced with: admins, editors, launchers, viewers
-
-    # Method 2: LDAP attribute
-    DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE=dagsterRole
-
-    # Optional TLS
-    DAGSTER_AUTH_LDAP_USE_TLS=true
-    DAGSTER_AUTH_LDAP_CA_CERT=/path/to/ca.crt
 """
 
 import logging
@@ -45,11 +24,9 @@ class LDAPAuthBackend(AuthBackend):
     Features:
     - Thread-safe (uses ldap3 SAFE_SYNC strategy)
     - Pure Python (no C dependencies)
-    - Connection pooling
     - TLS support
     - Smart group pattern matching
     - Flexible role mapping (groups or attributes)
-    - Cross-platform (Windows, Linux, macOS)
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -72,8 +49,8 @@ class LDAPAuthBackend(AuthBackend):
             "(uid={username})"
         )
 
-        # TLS settings
-        self.use_tls = config.get("DAGSTER_AUTH_LDAP_USE_TLS", "false").lower() == "true"
+        # TLS settings - string cast to prevent bool-proxy issues
+        self.use_tls = str(config.get("DAGSTER_AUTH_LDAP_USE_TLS", "false")).lower() == "true"
         self.ca_cert = config.get("DAGSTER_AUTH_LDAP_CA_CERT")
 
         # Role mapping strategy
@@ -91,18 +68,8 @@ class LDAPAuthBackend(AuthBackend):
         else:
             self.group_mappings = {}
 
-        # Initialize server and connection pool
         self.server = None
         self._init_server()
-
-        logger.info(
-            f"LDAPAuthBackend initialized:\n"
-            f"  Server: {self.server_uri}\n"
-            f"  Base DN: {self.base_dn}\n"
-            f"  User filter: {self.user_filter}\n"
-            f"  TLS: {self.use_tls}\n"
-            f"  Role mapping: {'groups' if self.group_mappings else 'attribute' if self.role_attribute else 'default (VIEWER)'}"
-        )
 
     def _init_server(self):
         """Initialize LDAP server object."""
@@ -110,7 +77,6 @@ class LDAPAuthBackend(AuthBackend):
             from ldap3 import Server, Tls
             import ssl
 
-            # TLS setup
             tls_config = None
             if self.use_tls:
                 tls_config = Tls(
@@ -123,16 +89,9 @@ class LDAPAuthBackend(AuthBackend):
                 use_ssl=self.use_tls,
                 tls=tls_config,
             )
-
-            logger.info("LDAP: Server initialized")
-
-        except ImportError:
-            raise RuntimeError(
-                "LDAP backend requires 'ldap3' package.\n"
-                "Install with: pip install ldap3"
-            )
+            logger.info(f"LDAP: Server initialized for {self.server_uri}")
         except Exception as e:
-            logger.error(f"Failed to initialize LDAP server: {e}")
+            logger.error(f"LDAP: Failed to initialize server object: {e}")
             raise
 
     def get_name(self) -> str:
@@ -145,139 +104,148 @@ class LDAPAuthBackend(AuthBackend):
     def authenticate(self, username: str, password: str) -> Optional[AuthUser]:
         """
         Authenticates user against LDAP.
-
-        Process:
-        1. Search for user DN
-        2. Bind with user credentials
-        3. Fetch user attributes
-        4. Determine role (groups or attribute)
-        5. Return AuthUser
         """
         try:
             from ldap3 import Connection, SAFE_SYNC
 
-            # Step 1: Find user DN using service account
+            # Step 1: Find user DN
             user_dn = self._find_user_dn(username)
             if not user_dn:
-                logger.warning(f"LDAP: User '{username}' not found")
                 return None
 
-            # Step 2: Authenticate by binding with user credentials
+            # Step 2: Bind with user credentials
             conn = Connection(
                 self.server,
                 user=user_dn,
                 password=password,
                 client_strategy=SAFE_SYNC,
-                auto_bind=True,
+                auto_bind=False,
                 raise_exceptions=False,
             )
 
-            if not conn.bind():
-                logger.warning(f"LDAP: Invalid password for '{username}'")
+            status, result, _, _ = conn.bind()
+
+            if not status:
+                logger.warning(f"LDAP: Authentication failed for '{username}': {result.get('description')}")
                 return None
 
-            logger.info(f"LDAP: User '{username}' authenticated successfully")
+            logger.info(f"LDAP: User '{username}' bound successfully")
 
-            # Step 3: Fetch user attributes
-            attrs = self._get_user_attributes(user_dn)
-
-            # Step 4: Determine role
-            role = self._determine_role(user_dn, attrs)
+            # Step 3 & 4: Attributes and Role
+            attrs = self._get_user_attributes(user_dn, conn)
+            role = self._determine_role(user_dn, attrs, conn=conn)
 
             conn.unbind()
 
-            # Step 5: Build AuthUser
+            displayName = attrs.get("displayName", "")
+            cn = attrs.get("cn", [])
+
+            # displayName pode ser string ou lista
+            if isinstance(displayName, list):
+                displayName = displayName[0] if displayName else ""
+
+            cn_value = cn[0] if cn else ""
+
+            full_name = displayName or cn_value or username
+
             return AuthUser(
                 username=username,
                 role=role,
                 email=attrs.get("mail", [""])[0] if attrs.get("mail") else "",
-                full_name=attrs.get("displayName", [attrs.get("cn", [""])[0]])[0] if attrs.get("displayName") or attrs.get("cn") else "",
+                full_name=full_name
             )
 
         except Exception as e:
-            logger.error(f"LDAP authentication error for '{username}': {e}")
+            logger.error(f"LDAP: Auth error for '{username}': {e}")
             return None
 
     def get_user(self, username: str) -> Optional[AuthUser]:
-        """
-        Fetches user info from LDAP (without password check).
-
-        ⚠️ WARNING: This queries LDAP on every call!
-
-        Usage:
-        - CLI tools (dagster-authkit list-users)
-        - Admin operations
-
-        NOT for:
-        - Session validation (middleware has cached data)
-        - Per-request auth checks (use session)
-
-        For active sessions, user data is already in session cache.
-        This method is ONLY for cases where you need fresh LDAP data.
-        """
+        """Fetch user info from LDAP without password check."""
         try:
+            from ldap3 import Connection, SAFE_SYNC
+
             user_dn = self._find_user_dn(username)
             if not user_dn:
                 return None
 
-            attrs = self._get_user_attributes(user_dn)
-            role = self._determine_role(user_dn, attrs)
+            conn = Connection(
+                self.server,
+                user=self.bind_dn,
+                password=self.bind_password,
+                client_strategy=SAFE_SYNC,
+                auto_bind=True
+            )
+
+            attrs = self._get_user_attributes(user_dn, conn)
+            role = self._determine_role(user_dn, attrs, conn=conn)
+
+            conn.unbind()
+
+            displayName = attrs.get("displayName", "")
+            cn = attrs.get("cn", [])
+
+            if isinstance(displayName, list):
+                displayName = displayName[0] if displayName else ""
+
+            cn_value = cn[0] if cn else ""
+
+            full_name = displayName or cn_value or username
 
             return AuthUser(
                 username=username,
                 role=role,
                 email=attrs.get("mail", [""])[0] if attrs.get("mail") else "",
-                full_name=attrs.get("displayName", [attrs.get("cn", [""])[0]])[0] if attrs.get("displayName") or attrs.get("cn") else "",
+                full_name=full_name
             )
         except Exception as e:
-            logger.error(f"LDAP get_user error for '{username}': {e}")
+            logger.error(f"LDAP: get_user error for '{username}': {e}")
             return None
 
     # ========================================
-    # LDAP Helpers
+    # LDAP Helpers (SAFE_SYNC Architecture)
     # ========================================
 
     def _find_user_dn(self, username: str) -> Optional[str]:
-        """Search for user DN by username."""
+        """Search for user DN using service account and tuple unpacking."""
         try:
-            from ldap3 import Connection, SAFE_SYNC
+            from ldap3 import Connection, SAFE_SYNC, SUBTREE
             from ldap3.utils.conv import escape_filter_chars
 
-            # Use service account for search (or anonymous if not configured)
+            #
             conn = Connection(
                 self.server,
                 user=self.bind_dn,
                 password=self.bind_password,
                 client_strategy=SAFE_SYNC,
-                auto_bind=True,
+                auto_bind=True
             )
 
-            search_filter = self.user_filter.format(username=escape_filter_chars(username))
-
-            conn.search(
+            status, _, response, _ = conn.search(
                 search_base=self.base_dn,
-                search_filter=search_filter,
-                attributes=["dn"]
+                search_filter=self.user_filter.format(username=escape_filter_chars(username)),
+                search_scope=SUBTREE,
+                attributes=[],
+                size_limit=1
             )
 
-            if conn.entries:
-                user_dn = str(conn.entries[0].entry_dn)
+            if status and response:
+                dn = response[0]['dn']
                 conn.unbind()
-                return user_dn
+                return dn
 
             conn.unbind()
+            logger.warning(f"LDAP: User '{username}' not found under base DN.")
             return None
-
         except Exception as e:
-            logger.error(f"LDAP search error: {e}")
+            logger.error(f"LDAP: Error searching DN for '{username}': {e}")
             return None
 
-    def _get_user_attributes(self, user_dn: str) -> Dict[str, List[str]]:
-        """Fetch user attributes from LDAP."""
+    def _get_user_attributes(self, user_dn: str, existing_conn=None) -> Dict[str, List[str]]:
+        """Fetch attributes using raw response from SAFE_SYNC tuple."""
         try:
             from ldap3 import Connection, SAFE_SYNC
 
-            conn = Connection(
+            conn = existing_conn or Connection(
                 self.server,
                 user=self.bind_dn,
                 password=self.bind_password,
@@ -285,100 +253,128 @@ class LDAPAuthBackend(AuthBackend):
                 auto_bind=True,
             )
 
-            # Attributes to fetch
-            attrs_to_fetch = [
-                "cn", "displayName", "mail", "memberOf",
-            ]
+            attrs_to_fetch = ["cn", "displayName", "mail", "memberOf"]
             if self.role_attribute:
                 attrs_to_fetch.append(self.role_attribute)
 
-            conn.search(
+            status, _, response, _ = conn.search(
                 search_base=user_dn,
                 search_filter="(objectClass=*)",
                 search_scope="BASE",
                 attributes=attrs_to_fetch
             )
 
-            if conn.entries:
-                entry = conn.entries[0]
-                attrs = {}
+            if status and response:
+                attrs = response[0].get('attributes', {})
 
-                # Convert ldap3 Entry to dict
-                for attr_name in attrs_to_fetch:
-                    if hasattr(entry, attr_name):
-                        value = getattr(entry, attr_name).values
-                        attrs[attr_name] = value if isinstance(value, list) else [value]
+                # ✅ DEBUG: Ver o que veio do LDAP
+                logger.info(f"🔍 LDAP Attributes for {user_dn}:")
+                logger.info(f"  Raw attrs: {attrs}")
+                logger.info(f"  displayName: {attrs.get('displayName')}")
+                logger.info(f"  cn: {attrs.get('cn')}")
+                logger.info(f"  mail: {attrs.get('mail')}")
 
-                conn.unbind()
                 return attrs
 
-            conn.unbind()
             return {}
-
         except Exception as e:
-            logger.error(f"LDAP attribute fetch error: {e}")
+            logger.error(f"LDAP: Error fetching attributes for {user_dn}: {e}")
             return {}
 
-    def _determine_role(self, user_dn: str, attrs: Dict[str, List[str]]) -> Role:
+    def _determine_role(self, user_dn: str, attrs: Dict[str, List[str]], conn=None) -> Role:
         """
-        Determine user role from LDAP.
+        Determine role with fallback to manual group search.
+        """
+        # 1. Try to get groups from user attributes (standard memberOf)
+        member_of = [m.lower() for m in attrs.get("memberOf", [])]
 
-        Priority:
-        1. Group membership (if configured)
-        2. LDAP attribute (if configured)
-        3. Default to VIEWER
-        """
-        # Method 1: Group membership
-        member_of = attrs.get("memberOf", [])
+        # 2. If member_of is empty, perform a Reverse Group Search (The OpenLDAP fix)
+        if not member_of and conn:
+            logger.debug(f"LDAP: memberOf empty for {user_dn}. Performing manual group search.")
+            member_of = self._get_user_groups_manually(user_dn, conn)
+
+        # 3. Check group mappings (Case-insensitive)
         if member_of and self.group_mappings:
-            # Check groups in priority order (ADMIN > EDITOR > LAUNCHER > VIEWER)
+            # Priority order: ADMIN > EDITOR > LAUNCHER > VIEWER
             for role in [Role.ADMIN, Role.EDITOR, Role.LAUNCHER, Role.VIEWER]:
-                group_dn = self.group_mappings.get(role)
-                if group_dn and group_dn in member_of:
-                    logger.debug(f"Role determined by group: {role.name}")
+                target_group = self.group_mappings.get(role)
+                if target_group and target_group.lower() in member_of:
+                    logger.info(f"LDAP: Role {role.name} assigned to {user_dn}")
                     return role
 
-        # Method 2: LDAP attribute
+        # 4. Fallback to Role Attribute if configured
         if self.role_attribute:
             role_values = attrs.get(self.role_attribute, [])
             if role_values:
-                role_value = str(role_values[0]).upper()
                 try:
-                    role = Role[role_value]
-                    logger.debug(f"Role determined by attribute: {role.name}")
-                    return role
+                    return Role[str(role_values[0]).upper()]
                 except KeyError:
-                    logger.warning(f"Invalid role value in LDAP: {role_value}")
+                    pass
 
-        # Default: VIEWER
-        logger.debug("Role defaulted to VIEWER")
+        logger.warning(f"LDAP: No group match found for {user_dn}. Defaulting to VIEWER.")
         return Role.VIEWER
 
-    # ========================================
-    # User Management (NOT SUPPORTED)
-    # ========================================
+    def _get_domain_base_dn(self) -> str:
+        """Extract domain base DN from user base DN (remove OU)."""
+        parts = self.base_dn.split(',')
+        # Remove OUs, keep only DCs
+        domain_parts = [p.strip() for p in parts if p.strip().lower().startswith('dc=')]
+        return ','.join(domain_parts)
 
-    def add_user(self, *args, **kwargs) -> bool:
-        """LDAP doesn't support user creation via Dagster."""
-        logger.error("LDAP backend does not support add_user(). Create users in LDAP/AD.")
-        return False
+    def _get_user_groups_manually(self, user_dn: str, conn=None) -> List[str]:
+        """
+        Reverse search: Find groups that have this user DN as a member.
+        Works for OpenLDAP which doesn't auto-populate memberOf.
 
-    def delete_user(self, *args, **kwargs) -> bool:
-        """LDAP doesn't support user deletion via Dagster."""
-        logger.error("LDAP backend does not support delete_user(). Disable users in LDAP/AD.")
-        return False
+        Creates its own admin connection for search (users can't search groups).
+        """
+        try:
+            from ldap3 import Connection, SAFE_SYNC, SUBTREE
 
-    def change_password(self, *args, **kwargs) -> bool:
-        """LDAP doesn't support password changes via Dagster."""
-        logger.error("LDAP backend does not support change_password(). Use LDAP/AD password reset.")
-        return False
+            # ✅ FIX: Create ADMIN connection (users can't search)
+            admin_conn = Connection(
+                self.server,
+                user=self.bind_dn,
+                password=self.bind_password,
+                client_strategy=SAFE_SYNC,
+                auto_bind=True
+            )
+
+            # Search from domain base to find groups in ou=groups
+            domain_base = self._get_domain_base_dn()
+
+            search_filter = f"(|(member={user_dn})(uniqueMember={user_dn}))"
+
+            logger.info(f"LDAP: Manual group search:")
+            logger.info(f"  base_dn: {domain_base}")
+            logger.info(f"  filter: {search_filter}")
+            logger.info(f"  user_dn: {user_dn}")
+
+            status, _, response, _ = admin_conn.search(
+                search_base=domain_base,
+                search_filter=search_filter,
+                search_scope=SUBTREE,
+                attributes=['cn']
+            )
+
+            admin_conn.unbind()  # ✅ Cleanup
+
+            logger.info(f"LDAP: Search status: {status}")
+            logger.info(f"LDAP: Search response: {response}")
+
+            if status and response:
+                groups = [entry['dn'].lower() for entry in response]
+                logger.info(f"LDAP: Found {len(groups)} groups for {user_dn}: {groups}")
+                return groups
+
+            logger.warning(f"LDAP: No groups found for {user_dn}")
+            return []
+        except Exception as e:
+            logger.error(f"LDAP: Manual group search failed: {e}", exc_info=True)
+            return []
 
     def list_users(self) -> List[AuthUser]:
-        """
-        Lists all users in LDAP (filtered by user_filter).
-
-        ⚠️ WARNING: This can be expensive on large directories!
-        """
+        """Iterate through raw response to list users."""
         try:
             from ldap3 import Connection, SAFE_SYNC
 
@@ -390,42 +386,48 @@ class LDAPAuthBackend(AuthBackend):
                 auto_bind=True,
             )
 
-            # Search all users
-            search_filter = self.user_filter.replace("{username}", "*")
-
-            conn.search(
+            status, _, response, _ = conn.search(
                 search_base=self.base_dn,
-                search_filter=search_filter,
+                search_filter=self.user_filter.replace("{username}", "*"),
                 attributes=["cn", "displayName", "mail", "memberOf"]
             )
 
             users = []
-            for entry in conn.entries:
-                username = str(entry.cn.value) if hasattr(entry, 'cn') else "unknown"
+            if status and response:
+                for entry in response:
+                    raw_attrs = entry.get('attributes', {})
+                    username = raw_attrs.get('cn', ["unknown"])[0]
+                    role = self._determine_role(entry['dn'], raw_attrs)
 
-                attrs = {}
-                for attr in ["cn", "displayName", "mail", "memberOf"]:
-                    if hasattr(entry, attr):
-                        value = getattr(entry, attr).values
-                        attrs[attr] = value if isinstance(value, list) else [value]
-
-                role = self._determine_role(str(entry.entry_dn), attrs)
-
-                users.append(AuthUser(
-                    username=username,
-                    role=role,
-                    email=attrs.get("mail", [""])[0] if attrs.get("mail") else "",
-                    full_name=attrs.get("displayName", [""])[0] if attrs.get("displayName") else "",
-                ))
+                    users.append(AuthUser(
+                        username=username,
+                        role=role,
+                        email=raw_attrs.get("mail", [""])[0],
+                        full_name=raw_attrs.get("displayName", [username])[0],
+                    ))
 
             conn.unbind()
             return users
-
         except Exception as e:
-            logger.error(f"LDAP list_users error: {e}")
+            logger.error(f"LDAP: Error listing users: {e}")
             return []
 
+    # ========================================
+    # Write Operations (Unsupported - Fail Loud)
+    # ========================================
+
+    def add_user(self, *args, **kwargs) -> bool:
+        logger.error("LDAP: Backend does not support add_user(). Manage users in your LDAP/AD server.")
+        return False
+
+    def delete_user(self, *args, **kwargs) -> bool:
+        logger.error("LDAP: Backend does not support delete_user(). Disable users in your LDAP/AD server.")
+        return False
+
+    def change_password(self, *args, **kwargs) -> bool:
+        logger.error("LDAP: Backend does not support change_password(). Use your domain's native password tools.")
+        return False
+
     def change_role(self, *args, **kwargs) -> bool:
-        """LDAP doesn't support role changes via Dagster."""
-        logger.error("LDAP backend does not support change_role(). Manage roles in LDAP groups.")
+        logger.error("LDAP: Backend does not support change_role() via API. Manage permissions via LDAP groups.")
         return False
