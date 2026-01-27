@@ -1,0 +1,110 @@
+# ========================================
+# LDAP Bootstrap - Test Users & Groups
+# ========================================
+
+# Organizational Units
+# ========================================
+dn: ou=users,dc=example,dc=com
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+# RBAC Groups
+# ========================================
+dn: cn=dagster-admins,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: dagster-admins
+description: Dagster Administrators (full access)
+member: uid=alice,ou=users,dc=example,dc=com
+
+dn: cn=dagster-editors,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: dagster-editors
+description: Dagster Editors (manage schedules/sensors)
+member: uid=bob,ou=users,dc=example,dc=com
+
+dn: cn=dagster-launchers,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: dagster-launchers
+description: Dagster Launchers (execute runs)
+member: uid=charlie,ou=users,dc=example,dc=com
+
+dn: cn=dagster-viewers,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: dagster-viewers
+description: Dagster Viewers (read-only)
+member: uid=dave,ou=users,dc=example,dc=com
+
+# Test Users
+# ========================================
+
+# Alice (ADMIN)
+dn: uid=alice,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: alice
+cn: Alice Admin
+sn: Admin
+displayName: Alice Admin
+mail: alice@example.com
+givenName: Alice
+userPassword: password123
+uidNumber: 10001
+gidNumber: 10001
+homeDirectory: /home/alice
+loginShell: /bin/bash
+
+# Bob (EDITOR)
+dn: uid=bob,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: bob
+cn: Bob Editor
+sn: Editor
+displayName: Bob Editor
+mail: bob@example.com
+givenName: Bob
+userPassword: password123
+uidNumber: 10002
+gidNumber: 10002
+homeDirectory: /home/bob
+loginShell: /bin/bash
+
+# Charlie (LAUNCHER)
+dn: uid=charlie,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: charlie
+cn: Charlie Launcher
+sn: Launcher
+displayName: Charlie Launcher
+mail: charlie@example.com
+givenName: Charlie
+userPassword: password123
+uidNumber: 10003
+gidNumber: 10003
+homeDirectory: /home/charlie
+loginShell: /bin/bash
+
+# Dave (VIEWER)
+dn: uid=dave,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: dave
+cn: Dave Viewer
+sn: Viewer
+displayName: Dave Viewer
+mail: dave@example.com
+givenName: Dave
+userPassword: password123
+uidNumber: 10004
+gidNumber: 10004
+homeDirectory: /home/dave
+loginShell: /bin/bash

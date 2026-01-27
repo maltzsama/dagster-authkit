@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # Dagster + AuthKit (SQLite Backend)
+  # ========================================
+  dagster:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    container_name: dagster_authkit_sqlite
+    command: ["-h", "0.0.0.0", "-p", "3000", "--empty-workspace"]
+    ports:
+      - "3000:3000"
+    environment:
+      # AuthKit - SQLite Backend
+      - DAGSTER_AUTH_BACKEND=sql
+      - DAGSTER_AUTH_DATABASE_URL=sqlite:////data/dagster_auth.db
+
+      # Session (Cookie-based, stateless)
+      - DAGSTER_AUTH_SECRET_KEY=dev-secret-key-change-in-production
+      - DAGSTER_AUTH_SESSION_MAX_AGE=86400
+      - DAGSTER_AUTH_COOKIE_SECURE=false
+
+      # Admin Bootstrap
+      - DAGSTER_AUTH_ADMIN_PASSWORD=admin123
+
+      # Dagster
+      - DAGSTER_HOME=/opt/dagster/dagster_home
+
+      # Logging
+      - DAGSTER_AUTH_LOG_LEVEL=INFO
+      - DAGSTER_AUTH_AUDIT_LOG=true
+
+    volumes:
+      - sqlite_data:/data
+      - ../../dagster.yml:/opt/dagster/dagster_home/dagster.yml:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/auth/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  sqlite_data:
+    driver: local

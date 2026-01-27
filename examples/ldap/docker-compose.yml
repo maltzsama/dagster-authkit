@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: authkit_openldap
+    hostname: ldap.example.com
+    environment:
+      - LDAP_ORGANISATION=Example Corp
+      - LDAP_DOMAIN=example.com
+      - LDAP_ADMIN_PASSWORD=admin_secret
+      - LDAP_CONFIG_PASSWORD=config_secret
+      - LDAP_RFC2307BIS_SCHEMA=true
+      - LDAP_REMOVE_CONFIG_AFTER_SETUP=true
+      - LDAP_TLS=false
+      - LDAP_MODULES=memberof
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+
+    networks:
+      - authkit_network
+
+    healthcheck:
+      test: [ "CMD", "ldapwhoami", "-x", "-H", "ldap://localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  ldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: authkit_ldapadmin
+    hostname: ldapadmin.example.com
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=ldap
+      - PHPLDAPADMIN_HTTPS=false
+    ports:
+      - "8080:80"
+    depends_on:
+      ldap:
+        condition: service_healthy
+    networks:
+      - authkit_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: authkit_redis_ldap
+    ports:
+      - "6379:6379"
+    networks:
+      - authkit_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  dagster:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+      args:
+        - EXTRAS=ldap,redis
+    container_name: dagster_authkit_ldap
+    command: ["-h", "0.0.0.0", "-p", "3000", "--empty-workspace"]
+    ports:
+      - "3000:3000"
+    environment:
+      - DAGSTER_AUTH_BACKEND=ldap
+      - DAGSTER_AUTH_LDAP_SERVER=ldap://ldap:389
+      - DAGSTER_AUTH_LDAP_BASE_DN=ou=users,dc=example,dc=com
+      - DAGSTER_AUTH_LDAP_BIND_DN=cn=admin,dc=example,dc=com
+      - DAGSTER_AUTH_LDAP_BIND_PASSWORD=admin_secret
+      - DAGSTER_AUTH_LDAP_USER_FILTER=(uid={username})
+      - DAGSTER_AUTH_LDAP_GROUP_PATTERN=cn=dagster-{role},ou=groups,dc=example,dc=com
+      - DAGSTER_AUTH_LDAP_USE_TLS=false
+      - DAGSTER_AUTH_REDIS_URL=redis://redis:6379/0
+      - DAGSTER_AUTH_SECRET_KEY=dev-secret-key-change-in-production
+      - DAGSTER_AUTH_SESSION_MAX_AGE=86400
+      - DAGSTER_HOME=/opt/dagster/dagster_home
+      - DAGSTER_AUTH_LOG_LEVEL=INFO
+      - DAGSTER_AUTH_AUDIT_LOG=true
+    depends_on:
+      ldap:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../dagster.yml:/opt/dagster/dagster_home/dagster.yml:ro
+    networks:
+      - authkit_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/auth/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  ldap_data:
+    driver: local
+  ldap_config:
+    driver: local
+
+networks:
+  authkit_network:
+    driver: bridge

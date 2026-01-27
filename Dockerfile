@@ -1,6 +1,8 @@
 # Stage 1: Build
 FROM python:3.11-slim as builder
 
+ARG EXTRAS=""
+
 WORKDIR /build
 
 # System dependencies for compiling drivers (psycopg2, bcrypt, ldap)
@@ -14,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install project with production extras
 COPY . .
 RUN pip install --upgrade pip && \
-    pip install .[postgresql,redis] --prefix=/install
+    pip install ".[${EXTRAS}]" --prefix=/install
 
 # Stage 2: Runtime
 FROM python:3.11-slim
