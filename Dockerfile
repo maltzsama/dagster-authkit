@@ -3,7 +3,7 @@ FROM python:3.11-slim as builder
 
 WORKDIR /build
 
-# Dependências de sistema para compilar drivers (psycopg2, bcrypt, ldap)
+# System dependencies for compiling drivers (psycopg2, bcrypt, ldap)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsasl2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala o projeto com os extras de produção
+# Install project with production extras
 COPY . .
 RUN pip install --upgrade pip && \
     pip install .[postgresql,redis] --prefix=/install
@@ -21,24 +21,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Dependências de runtime (apenas as libs compartilhadas)
+# Runtime dependencies (only shared libraries)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     libldap-common \
     $(apt-cache search libldap- | grep -o "libldap-[0-9].[0-9]-[0-9]" | head -n 1) \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia os pacotes instalados do stage de build
+# Copy installed packages from build stage
 COPY --from=builder /install /usr/local
 
-# Configuração do Dagster Home (necessário para o webserver rodar)
+# Dagster Home configuration (required for webserver to run)
 ENV DAGSTER_HOME=/opt/dagster/dagster_home
 RUN mkdir -p $DAGSTER_HOME
-COPY dagster.yaml $DAGSTER_HOME/
+COPY dagster.yml $DAGSTER_HOME/
 
-# Expondo a porta padrão do Dagster
+# Expose default Dagster port
 EXPOSE 3000
 
-# O entrypoint é o nosso CLI que faz o patch e sobe o server
+# The entrypoint is our CLI that patches and starts the server
 ENTRYPOINT ["dagster-authkit"]
 CMD ["-h", "0.0.0.0", "-p", "3000"]

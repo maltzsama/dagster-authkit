@@ -1,5 +1,5 @@
 services:
-  # O Cérebro: Dagster + AuthKit
+  # The Brain: Dagster + AuthKit
   dagster:
     build: .
     container_name: dagster_authkit_app
@@ -7,13 +7,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Configuração do AuthKit
+      # AuthKit Configuration
       - AUTH_BACKEND=sql
       - DAGSTER_AUTH_DATABASE_URL=postgresql://dagster_user:dagster_pass@db:5432/auth_db
       - DAGSTER_AUTH_REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=super-secret-key-change-me-in-prod
       - SESSION_MAX_AGE=86400
-      # Configuração do Dagster
+      # Dagster Configuration
       - DAGSTER_HOME=/opt/dagster/dagster_home
     depends_on:
       db:
@@ -21,9 +21,9 @@ services:
       redis:
         condition: service_started
     volumes:
-      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
+      - ./dagster.yml:/opt/dagster/dagster_home/dagster.yml
 
-  # O Coração: Banco de Dados de Usuários
+  # The Heart: User Database
   db:
     image: postgres:15-alpine
     container_name: authkit_postgres
@@ -37,7 +37,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # O Pulmão: Cache de Sessões (Redis)
+  # The Lungs: Session Cache (Redis)
   redis:
     image: redis:7-alpine
     container_name: authkit_redis

@@ -37,6 +37,10 @@ class AuthConfig:
             "DAGSTER_AUTH_DATABASE_URL", f"sqlite:///{self.DAGSTER_AUTH_DB}"
         )
 
+        # UI Injection Settings
+        self.UI_DEBUG = os.getenv("DAGSTER_AUTH_DEBUG", "false").lower() == "true"
+        self.UI_SAFE_MODE = os.getenv("DAGSTER_AUTH_UI_SAFE_MODE", "true").lower() == "true"
+
         # Rate limiting
         self.RATE_LIMIT_ENABLED = os.getenv("DAGSTER_AUTH_RATE_LIMIT", "true").lower() == "true"
         self.RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("DAGSTER_AUTH_RATE_LIMIT_ATTEMPTS", "5"))
