@@ -1,81 +1,44 @@
-# Production Dockerfile for dagster-authkit
-# Multi-stage build for minimal image size
-
-# Stage 1: Builder
+# Stage 1: Build
 FROM python:3.11-slim as builder
 
 WORKDIR /build
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
+# Dependências de sistema para compilar drivers (psycopg2, bcrypt, ldap)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    libldap2-dev \
+    libsasl2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
-COPY pyproject.toml README.md ./
-COPY dagster_authkit ./dagster_authkit
-
-# Build wheel
-RUN pip install build && \
-    python -m build --wheel
+# Instala o projeto com os extras de produção
+COPY . .
+RUN pip install --upgrade pip && \
+    pip install .[postgresql,redis] --prefix=/install
 
 # Stage 2: Runtime
 FROM python:3.11-slim
 
-# Create non-root user
-RUN groupadd -r dagster && \
-    useradd -r -g dagster -s /bin/bash dagster
+WORKDIR /app
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
+# Dependências de runtime (apenas as libs compartilhadas)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libldap-common \
+    $(apt-cache search libldap- | grep -o "libldap-[0-9].[0-9]-[0-9]" | head -n 1) \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dagster-authkit from wheel
-COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl[sqlite] && \
-    rm -rf /tmp/*.whl
+# Copia os pacotes instalados do stage de build
+COPY --from=builder /install /usr/local
 
-# Create directories
-RUN mkdir -p /data /opt/dagster/home /workspace && \
-    chown -R dagster:dagster /data /opt/dagster /workspace
+# Configuração do Dagster Home (necessário para o webserver rodar)
+ENV DAGSTER_HOME=/opt/dagster/dagster_home
+RUN mkdir -p $DAGSTER_HOME
+COPY dagster.yaml $DAGSTER_HOME/
 
-# Switch to non-root user
-USER dagster
-
-# Set working directory
-WORKDIR /workspace
-
-# Environment variables (can be overridden in docker-compose or k8s)
-ENV DAGSTER_AUTH_BACKEND=sqlite \
-    DAGSTER_AUTH_DB=/data/dagster_auth.db \
-    DAGSTER_HOME=/opt/dagster/home \
-    PYTHONUNBUFFERED=1
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:3000/auth/login || exit 1
-
-# Expose port
+# Expondo a porta padrão do Dagster
 EXPOSE 3000
 
-# Run dagster-authkit
-CMD ["dagster-authkit", "-h", "0.0.0.0", "-p", "3000"]
-
-# Usage:
-# ------
-# Build:
-#   docker build -t dagster-authkit:latest .
-#
-# Run with admin bootstrap:
-#   docker run -d \
-#     -p 3000:3000 \
-#     -e DAGSTER_AUTH_ADMIN_USER=admin \
-#     -e DAGSTER_AUTH_ADMIN_PASSWORD=SecurePass123 \
-#     -e DAGSTER_AUTH_SECRET_KEY=$(openssl rand -hex 32) \
-#     -v dagster-auth-data:/data \
-#     dagster-authkit:latest
-#
-# Manage users:
-#   docker exec -it <container> dagster-authkit list-users
-#   docker exec -it <container> dagster-authkit add-user newuser --editor
+# O entrypoint é o nosso CLI que faz o patch e sobe o server
+ENTRYPOINT ["dagster-authkit"]
+CMD ["-h", "0.0.0.0", "-p", "3000"]

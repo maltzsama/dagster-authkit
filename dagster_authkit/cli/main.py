@@ -111,14 +111,22 @@ def main():
     # 8. Executing the server
     # We modify sys.argv[0] so Click (the CLI lib Dagster uses) 
     # shows the help messages correctly as 'dagster'.
-    sys.argv[0] = "dagster"
+    sys.argv[0] = "dagster-webserver"
 
     try:
         logger.info("🚀 Launching Dagster webserver process...")
-        # Note: This is a blocking call.
         dagster_cli_main()
+    except SystemExit as e:
+        if e.code == 2:
+            logger.error("❌ Dagster webserver failed: Missing arguments.")
+            print("\n" + "!" * 60)
+            print("ERROR: You must provide a workspace or a module to load.")
+            print("Example: dagster-authkit -m your_package.definitions")
+            print("Or use a workspace.yaml in the current directory.")
+            print("!" * 60 + "\n")
+        sys.exit(e.code)
     except Exception as e:
-        logger.critical(f"Unexpected crash in delegated process: {e}")
+        logger.critical(f"Unexpected crash: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
