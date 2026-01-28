@@ -1,19 +1,27 @@
-"""Authentication backends for dagster-authkit."""
+"""
+Authentication backends for dagster-authkit.
+
+This module exposes the available authentication providers.
+The unified Peewee backend handles all SQL-based providers.
+"""
 
 from .base import AuthBackend
 from .dummy import DummyAuthBackend
 
-# Optional backends (may require extras)
+# Unified SQL Backend (requires Peewee)
 try:
-    from .sqlite import SQLiteAuthBackend
+    from .sql import PeeweeAuthBackend
 except ImportError:
-    SQLiteAuthBackend = None
+    # This happens if 'peewee' is not installed in the environment
+    PeeweeAuthBackend = None
 
+# LDAP Backend (requires ldap3)
 try:
     from .ldap import LDAPAuthBackend
 except ImportError:
     LDAPAuthBackend = None
 
+# Placeholder for future OAuth implementation
 try:
     from .oauth import OAuthBackend
 except ImportError:
@@ -22,7 +30,7 @@ except ImportError:
 __all__ = [
     "AuthBackend",
     "DummyAuthBackend",
-    "SQLiteAuthBackend",
+    "PeeweeAuthBackend",
     "LDAPAuthBackend",
     "OAuthBackend",
 ]

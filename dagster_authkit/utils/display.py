@@ -2,6 +2,7 @@
 Display Utilities - AuthKit UI for Terminal
 """
 
+
 def print_banner():
     """
     Prints the Dagster AuthKit startup banner.
@@ -16,6 +17,7 @@ def print_banner():
     ╚═══════════════════════════════════════════════════════════╝
     """
     print(banner)
+
 
 def print_config_summary(config_dict):
     """
@@ -32,13 +34,14 @@ def print_config_summary(config_dict):
         print(f"• {key}: {display_value}")
     print("─────────────────────────────────────────────\n")
 
+
 def show_security_banner(admin_pw: str):
     """
     Displays first-run credentials with a high-visibility border.
     """
     width = 60
     header = "🚀 FIRST RUN: ADMIN ACCOUNT CREATED"
-    
+
     print("\n" + "╔" + "═" * (width - 2) + "╗")
     print(f"║ {header:^{width - 4}} ║")
     print("╠" + "═" * (width - 2) + "╣")

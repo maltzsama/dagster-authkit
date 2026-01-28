@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: authkit_postgres
+    environment:
+      - POSTGRES_USER=dagster_user
+      - POSTGRES_PASSWORD=dagster_pass
+      - POSTGRES_DB=dagster_auth
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster_user -d dagster_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis (Session Storage)
+  redis:
+    image: redis:7-alpine
+    container_name: authkit_redis_pg
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Dagster + AuthKit
+  dagster:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+      args:
+        - EXTRAS=postgresql,redis
+    container_name: dagster_authkit_postgres
+    command: ["-h", "0.0.0.0", "-p", "3000", "--empty-workspace"]
+    ports:
+      - "3000:3000"
+    environment:
+      # AuthKit - PostgreSQL Backend
+      - DAGSTER_AUTH_BACKEND=sql
+      - DAGSTER_AUTH_DATABASE_URL=postgresql://dagster_user:dagster_pass@postgres:5432/dagster_auth
+
+      # Session Management (Redis)
+      - DAGSTER_AUTH_REDIS_URL=redis://redis:6379/0
+      - DAGSTER_AUTH_SECRET_KEY=dev-secret-key-change-in-production
+      - DAGSTER_AUTH_SESSION_MAX_AGE=86400
+
+      # Admin Bootstrap
+      - DAGSTER_AUTH_ADMIN_PASSWORD=admin123
+
+      # Dagster
+      - DAGSTER_HOME=/opt/dagster/dagster_home
+
+      # Logging
+      - DAGSTER_AUTH_LOG_LEVEL=INFO
+      - DAGSTER_AUTH_AUDIT_LOG=true
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    volumes:
+      - ../../dagster.yml:/opt/dagster/dagster_home/dagster.yml:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/auth/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data:
+    driver: local

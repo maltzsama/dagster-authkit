@@ -11,6 +11,11 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict
 
+from starlette.responses import JSONResponse
+
+from dagster_authkit.core.registry import get_backend
+from dagster_authkit.utils.config import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,7 +132,6 @@ def get_health_status() -> Dict[str, Any]:
     Returns:
         Dict with status and details
     """
-    from .config import config
 
     health = {
         "status": "healthy",
@@ -139,7 +143,6 @@ def get_health_status() -> Dict[str, Any]:
 
     # Check 1: Backend accessibility
     try:
-        from .registry import get_backend
 
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
         health["checks"]["backend"] = {"status": "ok", "name": backend.get_name()}
@@ -173,82 +176,57 @@ def get_health_status() -> Dict[str, Any]:
     return health
 
 
-def create_health_routes(routes):
+async def health_endpoint(request):
     """
-    Adds health check routes to the router.
+    Unified health check endpoint.
 
-    Only 2 endpoints:
-    - /auth/health: Unified health check (for load balancers AND K8s probes)
-    - /auth/metrics: Optional metrics (for observability)
+    Serves for:
+    - Load balancers (HTTP 200 = healthy)
+    - Kubernetes liveness probe
+    - Kubernetes readiness probe
 
-    Args:
-        routes: Starlette Routes object
+    Query params:
+    - ?type=live: Liveness check (always returns 200 if process alive)
+    - ?type=ready: Readiness check (checks backend)
+    - (default): Full health check with details
     """
-    from starlette.responses import JSONResponse
-    from starlette.routing import Route
+    check_type = request.query_params.get("type", "full")
 
-    async def health_endpoint(request):
-        """
-        Unified health check endpoint.
+    if check_type == "live":
+        # Liveness: Is process alive?
+        return JSONResponse({"alive": True}, status_code=200)
 
-        Serves for:
-        - Load balancers (HTTP 200 = healthy)
-        - Kubernetes liveness probe
-        - Kubernetes readiness probe
+    elif check_type == "ready":
+        # Readiness: Can serve traffic?
+        try:
 
-        Query params:
-        - ?type=live: Liveness check (always returns 200 if process alive)
-        - ?type=ready: Readiness check (checks backend)
-        - (default): Full health check with details
-        """
-        check_type = request.query_params.get("type", "full")
+            backend = get_backend(config.AUTH_BACKEND, config.__dict__)
+            return JSONResponse({"ready": True}, status_code=200)
+        except Exception as e:
+            return JSONResponse({"ready": False, "error": str(e)}, status_code=503)
 
-        if check_type == "live":
-            # Liveness: Is process alive?
-            return JSONResponse({"alive": True}, status_code=200)
+    else:
+        # Full health check
+        health = get_health_status()
 
-        elif check_type == "ready":
-            # Readiness: Can serve traffic?
-            try:
-                from .config import config
-                from .registry import get_backend
+        status_code = 200
+        if health["status"] == "degraded":
+            status_code = 200  # Still serving traffic
+        elif health["status"] == "unhealthy":
+            status_code = 503  # Service unavailable
 
-                backend = get_backend(config.AUTH_BACKEND, config.__dict__)
-                return JSONResponse({"ready": True}, status_code=200)
-            except Exception as e:
-                return JSONResponse({"ready": False, "error": str(e)}, status_code=503)
+        return JSONResponse(health, status_code=status_code)
 
-        else:
-            # Full health check
-            health = get_health_status()
 
-            status_code = 200
-            if health["status"] == "degraded":
-                status_code = 200  # Still serving traffic
-            elif health["status"] == "unhealthy":
-                status_code = 503  # Service unavailable
+async def metrics_endpoint(request):
+    """
+    Metrics endpoint (optional - for observability).
 
-            return JSONResponse(health, status_code=status_code)
-
-    async def metrics_endpoint(request):
-        """
-        Metrics endpoint (optional - for observability).
-
-        Returns basic metrics in JSON:
-        - Counters (login attempts, etc.)
-        - Gauges
-        - Histograms
-        - Uptime
-        """
-        metrics = _metrics.get_metrics()
-        return JSONResponse(metrics)
-
-    # Adds only 2 routes
-    routes.routes.extend(
-        [
-            Route("/auth/health", health_endpoint, methods=["GET"]),
-            Route("/auth/metrics", metrics_endpoint, methods=["GET"]),
-        ]
-    )
-
-    logger.info("Health check routes registered: /auth/health (unified), /auth/metrics")
+    Returns basic metrics in JSON:
+    - Counters (login attempts, etc.)
+    - Gauges
+    - Histograms
+    - Uptime
+    """
+    metrics = _metrics.get_metrics()
+    return JSONResponse(metrics)

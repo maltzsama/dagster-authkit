@@ -1,8 +1,5 @@
 """
-Authentication Middleware - The "Indestructible" Version
-
-Fixed: Correctly maps GraphQL field names to prevent "Webserver crash" errors.
-Injects PythonError extensions to support Dagster's native error inspector.
+Authentication Middleware - Community RBAC Version
 """
 
 import json
@@ -14,139 +11,200 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
+from dagster_authkit.auth.security import SecurityHardening
+from dagster_authkit.auth.session import sessions
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
-from dagster_authkit.auth.security import SecurityHardening
-from dagster_authkit.auth.session import validate_session
+
+from dagster_authkit.api.health import health_endpoint, metrics_endpoint
 
 logger = logging.getLogger(__name__)
 
 
 class DagsterAuthMiddleware(BaseHTTPMiddleware):
-    PUBLIC_PATHS = {"/auth/login", "/auth/logout", "/auth/process", "/auth/health", "/auth/metrics"}
-    ADMIN_PATHS_PREFIXES = ("/admin", "/settings", "/config")
-    WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+    # --- Configuration ---
+    PUBLIC_PATHS: frozenset[str] = frozenset(
+        {
+            "/auth/login",
+            "/auth/logout",
+            "/auth/process",
+            "/auth/health",
+            "/auth/metrics",
+        }
+    )
+
+    PUBLIC_PREFIXES: tuple[str, ...] = (
+        "/auth/",
+        "/static/",
+    )
+
+    WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
 
+        if path == "/auth/health":
+            return await health_endpoint(request)
+
+        if path == "/auth/metrics":
+            return await metrics_endpoint(request)
+
         if self._is_public_path(path):
             response = await call_next(request)
             return SecurityHardening.set_security_headers(response)
 
-        user_data = self._get_authenticated_user(request)
-        if not user_data:
+        # 1. Validation via v1.0 Manager
+        user = self._get_authenticated_user(request)
+        if not user:
+            # Better UX: 401 for APIs, 302 for humans
+            if path == "/graphql" or request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return Response(content="Unauthorized", status_code=401)
             return RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
 
-        username = user_data.get("username", "unknown")
-        roles = user_data.get("roles", [])
-
-        # ========================================
-        # GRAPHQL RBAC - THE FIX
-        # ========================================
+        # 2. GraphQL Mutation RBAC
         if path == "/graphql" and method == "POST":
             body = await request.body()
             graphql_data = self._parse_json(body)
-            query = graphql_data.get("query", "")
+            queries = graphql_data if isinstance(graphql_data, list) else [graphql_data]
 
-            # 1. Detect if it is a mutation
-            if self._is_mutation(query):
-                if not ("editor" in roles or "admin" in roles):
-                    # 2. Extract the ACTUAL field name (e.g., 'launchRun', not 'LaunchRun')
-                    field_name = self._extract_graphql_field_name(query)
-                    return self._generate_dagster_error_response(username, roles, field_name)
+            for g_item in queries:
+                query_str = g_item.get("query", "")
+                if self._is_mutation(query_str):
+                    mutation_name = self._extract_graphql_field_name(query_str)
+                    required_role = RolePermissions.get_required_role(mutation_name)
 
-            # Re-inject body for Dagster
+                    if required_role and not user.can(required_role):
+                        self._log_denied(user, mutation_name, required_role)
+                        return self._generate_dagster_error_response(
+                            user, mutation_name, required_role
+                        )
+
             async def receive():
                 return {"type": "http.request", "body": body}
 
             request = Request(request.scope, receive=receive)
 
-        else:
-            # REST RBAC
-            allowed, reason = self._check_rest_rbac(path, method, roles)
-            if not allowed:
-                return self._forbidden_html_response(username, roles, path, method, reason)
+        # 3. REST RBAC
+        elif method in self.WRITE_METHODS and not user.can(Role.EDITOR):
+            self._log_denied(user, f"REST_{method}_{path}", Role.EDITOR)
+            return self._forbidden_html_response(user, path, method, "REQUIRES_EDITOR")
 
-        request.state.user = user_data
+        request.state.user = user
         response = await call_next(request)
         return SecurityHardening.set_security_headers(response)
 
-    def _is_public_path(self, path: str) -> bool:
-        return path in self.PUBLIC_PATHS or path.startswith(("/auth/", "/static/"))
+    # --- Helper Methods ---
 
-    def _get_authenticated_user(self, request: Request) -> Optional[dict]:
+    def _get_authenticated_user(self, request: Request) -> Optional[AuthUser]:
         token = request.cookies.get(config.SESSION_COOKIE_NAME)
-        return validate_session(token) if token else None
+        if not token:
+            return None
 
-    def _parse_json(self, body: bytes) -> dict:
+        # v1.0 CALL: Using the sessions singleton validate method
+        user_data = sessions.validate(token)
+        if not user_data:
+            return None
+
+        try:
+            return AuthUser.from_dict(user_data)
+        except Exception as e:
+            logger.error(f"User deserialization failed: {e}")
+            return None
+
+    def _is_public_path(self, path: str) -> bool:
+        return path in self.PUBLIC_PATHS or any(path.startswith(p) for p in self.PUBLIC_PREFIXES)
+
+    @staticmethod
+    def _is_mutation(query: str) -> bool:
+        return "mutation" in query.lower()[:100]
+
+    @staticmethod
+    def _extract_graphql_field_name(query: str) -> str:
+        """v1.0 Robust Regex: Handles comments, aliases, and formatting."""
+        clean_query = re.sub(r"#.*", "", query)
+        pattern = r"mutation[^{]*\{\s*(?:[\w\d_]+\s*:\s*)?([\w\d_]+)"
+        match = re.search(pattern, clean_query, re.IGNORECASE | re.DOTALL)
+        return match.group(1) if match else "unknown"
+
+    @staticmethod
+    def _log_denied(user, action, role):
+        logger.warning(f"RBAC DENIED: {user.username} (role: {user.role.name}) tried {action}")
+        log_access_control(
+            user.username, "POST", "/graphql", False, [user.role.name], f"REQUIRES_{role.name}"
+        )
+
+    @staticmethod
+    def _parse_json(body: bytes) -> dict:
         try:
             return json.loads(body.decode("utf-8"))
         except:
             return {}
 
-    def _is_mutation(self, query: str) -> bool:
-        return "mutation" in query.lower()[:100]
-
-    def _extract_graphql_field_name(self, query: str) -> str:
-        """
-        Extracts the first field inside the mutation block.
-        Example: mutation X { launchRun(...) } -> returns 'launchRun'
-        """
-        # Procura a primeira palavra após o primeiro abre-chaves da mutation
-        match = re.search(r"mutation[^{]*\{\s*(\w+)", query)
-        if match:
-            return match.group(1)
-        return "unknown"
-
-    def _generate_dagster_error_response(self, username, roles, field_name):
-        """
-        Creates a schema-compliant response that satisfies Apollo and Dagster UI.
-        """
-        log_access_control(username, "POST", "/graphql", False, roles=roles, reason="RBAC_DENIED")
-
-        msg = f"Permission Denied: User '{username}' requires 'editor' role for mutations."
-
-        # Injeta a estrutura PythonError com as extensões que vimos no AppError.tsx
-        response_payload = {
+    @staticmethod
+    def _generate_dagster_error_response(user, mutation, role) -> Response:
+        payload = {
             "data": {
-                field_name: {
+                mutation: {
                     "__typename": "PythonError",
-                    "message": msg,
+                    "message": f"🔒 Access Denied: {role.name} role required",
                     "stack": [
-                        '  File "auth_middleware.py", line 105, in check_rbac\n    raise PermissionError("Insufficient roles")\n'
+                        f"Action: {mutation}\n",
+                        f"User: {user.username} (role: {user.role.name})\n",
+                        f"Required: {role.name}\n",
                     ],
-                    "cls_name": "PermissionError",
-                    "cause": None,
-                    "context": None,
+                    "cls_name": "AccessControlError",
                 }
             },
-            "errors": [
-                {
-                    "message": msg,
-                    "path": [field_name],
-                    "extensions": {
-                        "code": "FORBIDDEN",
-                        "errorInfo": {"message": msg, "stack": [], "cls_name": "PermissionError"},
-                    },
-                }
-            ],
+            "errors": [{"message": f"Access Denied: {role.name} required", "path": [mutation]}],
         }
+        return Response(content=json.dumps(payload), status_code=200, media_type="application/json")
 
-        return Response(
-            content=json.dumps(response_payload), status_code=200, media_type="application/json"
-        )
-
-    def _check_rest_rbac(self, path, method, roles):
-        if "admin" in roles:
-            return True, ""
-        if any(path.startswith(p) for p in self.ADMIN_PATHS_PREFIXES):
-            return False, "ADMIN_REQUIRED"
-        if method in self.WRITE_METHODS and "editor" not in roles:
-            return False, "EDITOR_REQUIRED"
-        return True, ""
-
-    def _forbidden_html_response(self, username, roles, path, method, reason):
-        html = f"<html><body style='font-family:sans-serif;'><h1>🔒 403 Forbidden</h1><p>{reason}</p></body></html>"
+    @staticmethod
+    def _forbidden_html_response(user: AuthUser, path: str, method: str, reason: str) -> Response:
+        """Generate HTML 403 response."""
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>403 Forbidden</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                    background-color: #0f111a;
+                    color: white;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                }}
+                .container {{
+                    text-align: center;
+                    border: 1px solid #333;
+                    padding: 40px;
+                    border-radius: 12px;
+                    background: #1a1d29;
+                    max-width: 500px;
+                }}
+                h1 {{ color: #ff6b6b; margin: 0 0 20px 0; }}
+                .info {{ color: #888; margin: 10px 0; }}
+                .detail {{ font-size: 12px; color: #555; margin-top: 20px; }}
+                a {{ color: #667eea; text-decoration: none; margin-top: 20px; display: inline-block; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔒 403 Forbidden</h1>
+                <p class="info">
+                    User <strong>{user.username}</strong> (role: <strong>{user.role.name}</strong>)
+                    cannot <strong>{method}</strong> on <strong>{path}</strong>.
+                </p>
+                <p class="detail">Reason: {reason}</p>
+                <a href="/">← Return to Dashboard</a>
+            </div>
+        </body>
+        </html>
+        """
         return Response(content=html, status_code=403, media_type="text/html")

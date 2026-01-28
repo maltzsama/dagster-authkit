@@ -1,11 +1,35 @@
-"""CLI tools for managing users in SQLite database."""
+"""
+CLI tools for managing users in SQL databases via Peewee.
+Supports unified SQL backends (SQLite, PostgreSQL, MySQL).
+"""
 
-import getpass
-from pathlib import Path
 import argparse
+import getpass
+import sys
+from pathlib import Path
+from typing import Optional
+
+from dagster_authkit.auth.backends.base import Role
+from dagster_authkit.auth.backends.sql import PeeweeAuthBackend, UserTable
+from dagster_authkit.utils.config import config
 
 
-from dagster_authkit.auth.backends.sqlite import SQLiteAuthBackend
+def _get_backend(db_path: Optional[str] = None) -> PeeweeAuthBackend:
+    """
+    Helper to instantiate the unified SQL backend.
+    Prioritizes provided CLI path, then falls back to DSN or legacy DB path.
+    """
+    # 1. Use the path provided in the CLI argument if present
+    effective_db = db_path or config.DAGSTER_AUTH_DATABASE_URL or config.DAGSTER_AUTH_DB
+
+    # 2. Convert raw file paths to SQLite DSN if necessary
+    if "://" not in effective_db:
+        dsn = f"sqlite:///{effective_db}"
+    else:
+        dsn = effective_db
+
+    return PeeweeAuthBackend({"DAGSTER_AUTH_DATABASE_URL": dsn})
+
 
 def handle_user_management():
     """
@@ -13,12 +37,11 @@ def handle_user_management():
     Parses arguments and dispatches to the correct command function.
     """
     parser = argparse.ArgumentParser(
-        prog="dagster-authkit", 
-        description="Dagster AuthKit - Administrative CLI"
+        prog="dagster-authkit", description="Dagster AuthKit - Administrative CLI"
     )
     subparsers = parser.add_subparsers(dest="command", help="Management commands")
 
-    # Register subcommands
+    # Register all subcommands
     setup_cli_parser(subparsers)
 
     args = parser.parse_args()
@@ -29,225 +52,194 @@ def handle_user_management():
         parser.print_help()
         return 1
 
+
 def init_db_command(args):
-    """Initialize a new database."""
-    db_path = args.db_path or "./dagster_auth.db"
+    """Initialize a new database and create necessary tables."""
+    backend = _get_backend(args.db_path)
 
-    if Path(db_path).exists() and not args.force:
-        print(f"❌ Database already exists: {db_path}")
-        print(f"   Use --force to recreate")
-        return 1
+    # Force table creation
+    UserTable._meta.database.create_tables([UserTable])
+    print(f"✅ Database tables initialized.")
 
-    # Create backend (will initialize database)
-    backend = SQLiteAuthBackend({"DAGSTER_AUTH_DB": db_path})
+    # Check if admin already exists (auto-bootstrap might have run)
+    if backend.get_user("admin"):
+        print("✅ Admin user already exists.")
+        return 0
 
-    print(f"✅ Database initialized: {db_path}")
-
-    # Offer to create admin user
     if args.with_admin or input("\nCreate admin user? (y/N): ").lower() == "y":
-        print("\nCreating admin user...")
         username = input("Username [admin]: ").strip() or "admin"
         password = getpass.getpass("Password: ")
-        password_confirm = getpass.getpass("Confirm password: ")
 
-        if password != password_confirm:
-            print("❌ Passwords don't match")
-            return 1
-
-        email = input("Email (optional): ").strip() or None
-
-        if backend.add_user(
-            username=username, password=password, email=email, roles=["admin", "editor", "viewer"]
-        ):
-            print(f"✅ Admin user '{username}' created successfully")
+        if backend.add_user(username=username, password=password, role=Role.ADMIN):
+            print(f"✅ Admin user '{username}' created successfully (Role: ADMIN)")
         else:
-            print(f"❌ Failed to create admin user")
+            print(f"❌ Failed to create admin user.")
             return 1
-
     return 0
 
 
 def add_user_command(args):
-    """Add a new user."""
-    db_path = args.db_path or "./dagster_auth.db"
+    """Add a new user to the SQL database."""
+    backend = _get_backend(args.db_path)
 
-    if not Path(db_path).exists():
-        print(f"❌ Database not found: {db_path}")
-        print(f"   Run: dagster-authkit init-db")
-        return 1
-
-    backend = SQLiteAuthBackend({"DAGSTER_AUTH_DB": db_path})
-
-    # Get password
-    if args.password:
-        password = args.password
-    else:
-        password = getpass.getpass("Password: ")
-        password_confirm = getpass.getpass("Confirm password: ")
-
-        if password != password_confirm:
-            print("❌ Passwords don't match")
+    password = args.password or getpass.getpass("Password: ")
+    if not args.password:
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            print("❌ Passwords do not match.")
             return 1
 
-    # Parse roles
-    roles = []
+    # Map flags to Role enum
+    role = Role.VIEWER
     if args.admin:
-        roles = ["admin", "editor", "viewer"]
+        role = Role.ADMIN
     elif args.editor:
-        roles = ["editor", "viewer"]
-    elif args.viewer:
-        roles = ["viewer"]
-    elif args.roles:
-        roles = args.roles.split(",")
-    else:
-        roles = ["viewer"]  # Default
+        role = Role.EDITOR
+    elif args.launcher:
+        role = Role.LAUNCHER
+    elif args.role:
+        try:
+            role = Role[args.role.upper()]
+        except KeyError:
+            print(f"❌ Invalid role: {args.role}. Use: VIEWER, LAUNCHER, EDITOR, ADMIN")
+            return 1
 
-    # Add user
     if backend.add_user(
         username=args.username,
         password=password,
-        email=args.email,
-        display_name=args.display_name,
-        roles=roles,
+        role=role,
+        email=args.email or "",
+        full_name=args.full_name or "",
     ):
-        print(f"✅ User '{args.username}' created successfully")
-        print(f"   Roles: {', '.join(roles)}")
+        print(f"✅ User '{args.username}' created successfully (Role: {role.name})")
         return 0
-    else:
-        print(f"❌ Failed to create user")
-        return 1
+
+    print(f"❌ Failed to create user (it may already exist)")
+    return 1
 
 
 def change_password_command(args):
-    """Change user password."""
-    db_path = args.db_path or "./dagster_auth.db"
+    """Update user password via CLI."""
+    backend = _get_backend(args.db_path)
 
-    if not Path(db_path).exists():
-        print(f"❌ Database not found: {db_path}")
-        return 1
+    new_password = args.password or getpass.getpass("New password: ")
 
-    backend = SQLiteAuthBackend({"DAGSTER_AUTH_DB": db_path})
-
-    # Get new password
-    if args.password:
-        new_password = args.password
-    else:
-        new_password = getpass.getpass("New password: ")
-        password_confirm = getpass.getpass("Confirm password: ")
-
-        if new_password != password_confirm:
-            print("❌ Passwords don't match")
-            return 1
-
-    if backend.change_password(args.username, new_password):
-        print(f"✅ Password changed for user '{args.username}'")
+    if backend.change_password(args.username, new_password, performed_by="cli"):
+        print(f"✅ Password updated for '{args.username}'.")
+        print(f"🔒 Security: All active sessions for this user were revoked.")
         return 0
-    else:
-        print(f"❌ Failed to change password")
-        return 1
+
+    print(f"❌ User '{args.username}' not found.")
+    return 1
 
 
 def list_users_command(args):
-    """List all users."""
-    db_path = args.db_path or "./dagster_auth.db"
+    """List all registered users from the SQL database."""
+    _get_backend(args.db_path)  # Just to ensure connection
 
-    if not Path(db_path).exists():
-        print(f"❌ Database not found: {db_path}")
-        return 1
-
-    backend = SQLiteAuthBackend({"DAGSTER_AUTH_DB": db_path})
-    users = backend.list_users()
-
+    users = UserTable.select()
     if not users:
-        print("No users found")
+        print("No users found in database.")
         return 0
 
-    print(f"\n{'Username':<15} {'Email':<25} {'Roles':<30} {'Last Login'}")
-    print("=" * 90)
+    print(f"\n{'Username':<20} {'Role':<12} {'Status':<10} {'Full Name':<25}")
+    print("-" * 70)
 
-    for user in users:
-        roles_str = ", ".join(user["roles"])
-        last_login = user["last_login"] or "Never"
-        print(
-            f"{user['username']:<15} "
-            f"{user['email'] or 'N/A':<25} "
-            f"{roles_str:<30} "
-            f"{last_login}"
+    for u in users:
+        # Resolve role name from value
+        role_name = (
+            Role(u.role_value).name
+            if u.role_value in [r.value for r in Role]
+            else str(u.role_value)
         )
+        status = "Active" if u.is_active else "Disabled"
+        print(f"{u.username:<20} {role_name:<12} {status:<10} {u.full_name or 'N/A':<25}")
 
-    print(f"\nTotal: {len(users)} users")
+    print(f"\nTotal: {len(users)} users.")
     return 0
 
 
 def delete_user_command(args):
-    """Delete a user."""
-    db_path = args.db_path or "./dagster_auth.db"
+    """Permanently delete a user from the database."""
+    backend = _get_backend(args.db_path)
 
-    if not Path(db_path).exists():
-        print(f"❌ Database not found: {db_path}")
-        return 1
-
-    backend = SQLiteAuthBackend({"DAGSTER_AUTH_DB": db_path})
-
-    # Confirm deletion
     if not args.yes:
-        confirm = input(f"Delete user '{args.username}'? (y/N): ")
+        confirm = input(f"Are you sure you want to delete user '{args.username}'? (y/N): ")
         if confirm.lower() != "y":
-            print("Cancelled")
+            print("Operation cancelled.")
             return 0
 
     if backend.delete_user(args.username):
-        print(f"✅ User '{args.username}' deleted")
+        print(f"✅ User '{args.username}' deleted.")
         return 0
-    else:
-        print(f"❌ Failed to delete user")
-        return 1
+
+    print(f"❌ Failed to delete user (not found).")
+    return 1
+
+
+def list_permissions_command(args):
+    """List RBAC permissions for each role."""
+    from dagster_authkit.auth.backends.base import RolePermissions
+
+    print("\n" + "=" * 60)
+    print("  DAGSTER AUTHKIT - RBAC PERMISSIONS MATRIX")
+    print("=" * 60)
+
+    for role in [Role.VIEWER, Role.LAUNCHER, Role.EDITOR, Role.ADMIN]:
+        perms = RolePermissions.list_permissions(role)
+        print(f"\n🔹 {role.name} (Level {role.value})")
+        if not perms:
+            print("   (Read-only / No mutations)")
+        else:
+            for p in sorted(perms):
+                print(f"   • {p}")
+    return 0
 
 
 def setup_cli_parser(subparsers):
-    """Setup CLI argument parsers for user management commands."""
+    """Setup CLI argument parsers for all commands."""
 
-    # init-db command
-    init_parser = subparsers.add_parser("init-db", help="Initialize authentication database")
-    init_parser.add_argument("--db-path", help="Database path (default: ./dagster_auth.db)")
-    init_parser.add_argument("--force", action="store_true", help="Recreate database if exists")
-    init_parser.add_argument(
-        "--with-admin", action="store_true", help="Create admin user during initialization"
-    )
-    init_parser.set_defaults(func=init_db_command)
+    # init-db
+    p_init = subparsers.add_parser("init-db", help="Initialize the SQL database")
+    p_init.add_argument("--db-path", help="Database path or DSN")
+    p_init.add_argument("--with-admin", action="store_true", help="Bootstrap admin user")
+    p_init.set_defaults(func=init_db_command)
 
-    # add-user command
-    add_parser = subparsers.add_parser("add-user", help="Add a new user")
-    add_parser.add_argument("username", help="Username")
-    add_parser.add_argument("--email", help="Email address")
-    add_parser.add_argument("--display-name", help="Display name")
-    add_parser.add_argument("--password", help="Password (will prompt if not provided)")
-    add_parser.add_argument("--db-path", help="Database path (default: ./dagster_auth.db)")
+    # add-user
+    p_add = subparsers.add_parser("add-user", help="Add a new user")
+    p_add.add_argument("username", help="Username")
+    p_add.add_argument("--password", help="Password (will prompt if omitted)")
+    p_add.add_argument("--email", help="User email")
+    p_add.add_argument("--full-name", help="User's full name")
+    p_add.add_argument("--db-path", help="Database path or DSN")
 
-    # Role shortcuts
-    role_group = add_parser.add_mutually_exclusive_group()
-    role_group.add_argument("--admin", action="store_true", help="Grant admin role")
-    role_group.add_argument("--editor", action="store_true", help="Grant editor role")
-    role_group.add_argument("--viewer", action="store_true", help="Grant viewer role")
-    role_group.add_argument("--roles", help="Comma-separated list of roles")
+    rg = p_add.add_mutually_exclusive_group()
+    rg.add_argument("--admin", action="store_true")
+    rg.add_argument("--editor", action="store_true")
+    rg.add_argument("--launcher", action="store_true")
+    rg.add_argument("--viewer", action="store_true")
+    rg.add_argument("--role", help="Specific role name")
+    p_add.set_defaults(func=add_user_command)
 
-    add_parser.set_defaults(func=add_user_command)
+    # change-password
+    p_pass = subparsers.add_parser("change-password", help="Change user password")
+    p_pass.add_argument("username", help="Username")
+    p_pass.add_argument("--password", help="New password")
+    p_pass.add_argument("--db-path", help="Database path or DSN")
+    p_pass.set_defaults(func=change_password_command)
 
-    # change-password command
-    passwd_parser = subparsers.add_parser("change-password", help="Change user password")
-    passwd_parser.add_argument("username", help="Username")
-    passwd_parser.add_argument("--password", help="New password (will prompt if not provided)")
-    passwd_parser.add_argument("--db-path", help="Database path (default: ./dagster_auth.db)")
-    passwd_parser.set_defaults(func=change_password_command)
+    # list-users
+    p_list = subparsers.add_parser("list-users", help="List all users")
+    p_list.add_argument("--db-path", help="Database path or DSN")
+    p_list.set_defaults(func=list_users_command)
 
-    # list-users command
-    list_parser = subparsers.add_parser("list-users", help="List all users")
-    list_parser.add_argument("--db-path", help="Database path (default: ./dagster_auth.db)")
-    list_parser.set_defaults(func=list_users_command)
+    # delete-user
+    p_del = subparsers.add_parser("delete-user", help="Delete a user")
+    p_del.add_argument("username", help="Username")
+    p_del.add_argument("--yes", "-y", action="store_true", help="Skip confirmation")
+    p_del.add_argument("--db-path", help="Database path or DSN")
+    p_del.set_defaults(func=delete_user_command)
 
-    # delete-user command
-    delete_parser = subparsers.add_parser("delete-user", help="Delete a user")
-    delete_parser.add_argument("username", help="Username to delete")
-    delete_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation")
-    delete_parser.add_argument("--db-path", help="Database path (default: ./dagster_auth.db)")
-    delete_parser.set_defaults(func=delete_user_command)
+    # list-permissions
+    p_perm = subparsers.add_parser("list-permissions", help="View RBAC matrix")
+    p_perm.set_defaults(func=list_permissions_command)

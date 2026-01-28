@@ -1,0 +1,3 @@
+storage:
+  sqlite:
+    base_dir: /opt/dagster/dagster_home/storage
