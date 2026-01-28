@@ -7,22 +7,37 @@ name = "dagster-authkit"
 version = "0.2.0"
 description = "Community Auth System for self-hosted Dagster OSS - RBAC, Audit Logging, and Session Management"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "Demetrius Albuquerque", email = "demetrius.albuquerque@yahoo.com.br"}
 ]
 keywords = [
-    "dagster", "authentication", "authorization", "rbac", "security", 
-    "audit-logging", "self-hosted", "community", "oss"
+    "dagster", "data-orchestration", "data-pipeline", "authentication",
+    "authorization", "rbac", "security", "audit-logging", "self-hosted",
+    "data-platform", "data-engineering", "devops", "dagster-auth",
+    "access-control", "session-management", "data-governance"
 ]
+
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Dagster",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Systems Administration :: Authentication/Directory"
 ]
 
 # Core dependencies (Always installed)
@@ -46,8 +61,10 @@ mariadb = ["mariadb>=1.1.8", "bcrypt>=5.0.0"]
 # Session & Cache
 redis = ["redis>=7.1.0"]
 
-# Future Backends (Maintained as requested)
+
 ldap = ["ldap3>=2.9.0"]
+
+# Future Backends (Maintained as requested)
 oauth = ["authlib>=1.2.0", "httpx>=0.24.0"]
 
 # Development & Testing
@@ -81,7 +98,7 @@ include = ["dagster_authkit*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py39', 'py310', 'py311']
+target-version = ['py310', 'py311', 'py312']
 
 [tool.ruff]
 line-length = 100
