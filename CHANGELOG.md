@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0](https://www.google.com/search?q=%5Bhttps://github.com/demetrius-mp/dagster-authkit/compare/v0.1.0...v0.2.0%5D(https://github.com/demetrius-mp/dagster-authkit/compare/v0.1.0...v0.2.0)) - 2026-01-28
+## [0.2.0] - 2026-01-28
 
 ### 🚀 Major Changes
 
@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0](https://www.google.com/search?q=%5Bhttps://github.com/demetrius-mp/dagster-authkit/releases/tag/v0.1.0%5D(https://github.com/demetrius-mp/dagster-authkit/releases/tag/v0.1.0)) - 2026-01-25
+## [0.1.0] - 2026-01-25
 
 ### 🎉 Initial Release
 
@@ -181,13 +181,6 @@ N/A - Initial release
 ### Planned Features
 - LDAP/Active Directory backend implementation
 - OAuth 2.0 backend implementation (Google, Azure AD, Okta)
-- CSRF protection for login forms
 - Multi-instance support (Redis-based rate limiting and sessions)
-- More granular permissions (resource-level access control)
-- Password reset flow
-- User self-service (change own password)
-- Admin UI for user management (web-based)
 
 ---
-
-[0.1.0]: https://github.com/demetrius-mp/dagster-authkit/releases/tag/v0.1.0
