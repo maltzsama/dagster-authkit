@@ -91,9 +91,12 @@ def add_user_command(args):
 
     # Map flags to Role enum
     role = Role.VIEWER
-    if args.admin: role = Role.ADMIN
-    elif args.editor: role = Role.EDITOR
-    elif args.launcher: role = Role.LAUNCHER
+    if args.admin:
+        role = Role.ADMIN
+    elif args.editor:
+        role = Role.EDITOR
+    elif args.launcher:
+        role = Role.LAUNCHER
     elif args.role:
         try:
             role = Role[args.role.upper()]
@@ -106,7 +109,7 @@ def add_user_command(args):
         password=password,
         role=role,
         email=args.email or "",
-        full_name=args.full_name or ""
+        full_name=args.full_name or "",
     ):
         print(f"✅ User '{args.username}' created successfully (Role: {role.name})")
         return 0
@@ -132,7 +135,7 @@ def change_password_command(args):
 
 def list_users_command(args):
     """List all registered users from the SQL database."""
-    _get_backend(args.db_path) # Just to ensure connection
+    _get_backend(args.db_path)  # Just to ensure connection
 
     users = UserTable.select()
     if not users:
@@ -144,7 +147,11 @@ def list_users_command(args):
 
     for u in users:
         # Resolve role name from value
-        role_name = Role(u.role_value).name if u.role_value in [r.value for r in Role] else str(u.role_value)
+        role_name = (
+            Role(u.role_value).name
+            if u.role_value in [r.value for r in Role]
+            else str(u.role_value)
+        )
         status = "Active" if u.is_active else "Disabled"
         print(f"{u.username:<20} {role_name:<12} {status:<10} {u.full_name or 'N/A':<25}")
 
@@ -158,7 +165,7 @@ def delete_user_command(args):
 
     if not args.yes:
         confirm = input(f"Are you sure you want to delete user '{args.username}'? (y/N): ")
-        if confirm.lower() != 'y':
+        if confirm.lower() != "y":
             print("Operation cancelled.")
             return 0
 

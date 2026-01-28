@@ -51,8 +51,12 @@ class AuthConfig:
         self.DAGSTER_AUTH_LDAP_BASE_DN = os.getenv("DAGSTER_AUTH_LDAP_BASE_DN")
         self.DAGSTER_AUTH_LDAP_BIND_DN = os.getenv("DAGSTER_AUTH_LDAP_BIND_DN")
         self.DAGSTER_AUTH_LDAP_BIND_PASSWORD = os.getenv("DAGSTER_AUTH_LDAP_BIND_PASSWORD")
-        self.DAGSTER_AUTH_LDAP_USER_FILTER = os.getenv("DAGSTER_AUTH_LDAP_USER_FILTER", "(uid={username})")
-        self.DAGSTER_AUTH_LDAP_USE_TLS = str(os.getenv("DAGSTER_AUTH_LDAP_USE_TLS", "false")).lower() == "true"
+        self.DAGSTER_AUTH_LDAP_USER_FILTER = os.getenv(
+            "DAGSTER_AUTH_LDAP_USER_FILTER", "(uid={username})"
+        )
+        self.DAGSTER_AUTH_LDAP_USE_TLS = (
+            str(os.getenv("DAGSTER_AUTH_LDAP_USE_TLS", "false")).lower() == "true"
+        )
         self.DAGSTER_AUTH_LDAP_CA_CERT = os.getenv("DAGSTER_AUTH_LDAP_CA_CERT")
         self.DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE = os.getenv("DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE")
         self.DAGSTER_AUTH_LDAP_GROUP_PATTERN = os.getenv("DAGSTER_AUTH_LDAP_GROUP_PATTERN")

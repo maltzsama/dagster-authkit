@@ -153,17 +153,20 @@ class PeeweeAuthBackend(AuthBackend):
             return True
         return False
 
-    def change_password(self, username: str, new_password: str, performed_by: str = "system") -> bool:
+    def change_password(
+        self, username: str, new_password: str, performed_by: str = "system"
+    ) -> bool:
         """
         Updates password hash and revokes all active sessions for THIS user.
         """
-        query = UserTable.update(
-            password_hash=SecurityHardening.hash_password(new_password)
-        ).where(UserTable.username == username)
+        query = UserTable.update(password_hash=SecurityHardening.hash_password(new_password)).where(
+            UserTable.username == username
+        )
 
         if query.execute() > 0:
             # O "Doom" aqui é só no CPF do cara, não na firma toda.
             from dagster_authkit.auth.session import sessions
+
             sessions.revoke_all(username)
 
             log_audit_event("PASSWORD_CHANGED", performed_by, target=username)

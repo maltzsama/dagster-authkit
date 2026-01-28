@@ -28,6 +28,7 @@ MANAGEMENT_COMMANDS = [
     "list-permissions",
 ]
 
+
 def main():
     """
     Orchestrates the startup sequence.
@@ -40,6 +41,7 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] in MANAGEMENT_COMMANDS:
         try:
             from dagster_authkit.cli.cli_tools import handle_user_management
+
             sys.exit(handle_user_management())
         except Exception as e:
             logger.error(f"❌ Failed to execute management command: {e}")
@@ -77,6 +79,7 @@ def main():
         logger.info(f"Bootstrapping SQL backend: {config.AUTH_BACKEND}")
         try:
             from dagster_authkit.auth.backends.sql import PeeweeAuthBackend
+
             # Instantiating triggers table creation and admin check
             PeeweeAuthBackend(config.__dict__)
             logger.info("✅ SQL Database is ready")
@@ -92,12 +95,14 @@ def main():
     try:
         # Try modern path first (Dagster 1.10+)
         from dagster_webserver.cli import main as webserver_main
+
         dagster_cli_main = webserver_main
         logger.debug("Using 'dagster_webserver.cli'")
     except ImportError:
         try:
             # Fallback for older versions
             from dagit.cli import main as dagit_main
+
             dagster_cli_main = dagit_main
             logger.debug("Using 'dagit.cli' (legacy)")
         except ImportError:
@@ -109,7 +114,7 @@ def main():
             sys.exit(1)
 
     # 8. Executing the server
-    # We modify sys.argv[0] so Click (the CLI lib Dagster uses) 
+    # We modify sys.argv[0] so Click (the CLI lib Dagster uses)
     # shows the help messages correctly as 'dagster'.
     sys.argv[0] = "dagster-webserver"
 
@@ -128,6 +133,7 @@ def main():
     except Exception as e:
         logger.critical(f"Unexpected crash: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

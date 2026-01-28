@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # --- Interfaces ---
 
+
 class SessionBackend(ABC):
     @abstractmethod
     def create(self, user_data: Dict[str, Any]) -> str: ...
@@ -32,9 +33,11 @@ class SessionBackend(ABC):
 
 # --- Implementations ---
 
+
 class RedisBackend(SessionBackend):
     def __init__(self, redis_url: str, max_age: int):
         import redis
+
         self.client = redis.from_url(redis_url, decode_responses=True)
         self.max_age = max_age
 
@@ -100,6 +103,7 @@ class CookieBackend(SessionBackend):
 
 
 # --- The Orchestrator ---
+
 
 class SessionManager:
     def __init__(self):

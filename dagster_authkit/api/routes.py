@@ -28,12 +28,14 @@ from dagster_authkit.utils.config import config
 
 logger = logging.getLogger(__name__)
 
+
 def _get_client_ip(request: Request) -> str:
     """Helper to get real IP behind K8s Ingress (X-Forwarded-For)."""
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
 
 async def login_page(request: Request) -> Response:
     """GET /auth/login - Displays login page."""
@@ -240,6 +242,7 @@ async def login_page(request: Request) -> Response:
     """
     return HTMLResponse(content=html)
 
+
 async def process_login(request: Request) -> Response:
     """POST /auth/process - Authenticates and creates session."""
     form = await request.form()
@@ -257,7 +260,9 @@ async def process_login(request: Request) -> Response:
     if is_limited:
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({attempts} attempts)")
         log_rate_limit_violation(username, client_ip, attempts)
-        return RedirectResponse(url=f"/auth/login?next={next_url}&error=Too+many+attempts.", status_code=302)
+        return RedirectResponse(
+            url=f"/auth/login?next={next_url}&error=Too+many+attempts.", status_code=302
+        )
 
     # 2. Backend Call (Peewee / SQL)
     try:
@@ -266,13 +271,17 @@ async def process_login(request: Request) -> Response:
     except Exception as e:
         logger.error(f"Auth Backend Error: {e}")
         log_login_attempt(username, False, client_ip, "BACKEND_ERROR")
-        return RedirectResponse(url=f"/auth/login?next={next_url}&error=System+error.", status_code=302)
+        return RedirectResponse(
+            url=f"/auth/login?next={next_url}&error=System+error.", status_code=302
+        )
 
     # 3. Validation
     if not user:
         record_login_attempt(username)
         log_login_attempt(username, False, client_ip, "INVALID_CREDENTIALS")
-        return RedirectResponse(url=f"/auth/login?next={next_url}&error=Invalid+credentials.", status_code=302)
+        return RedirectResponse(
+            url=f"/auth/login?next={next_url}&error=Invalid+credentials.", status_code=302
+        )
 
     # 4. Success & Session Creation
     reset_rate_limit(username)
@@ -292,6 +301,7 @@ async def process_login(request: Request) -> Response:
         samesite=config.SESSION_COOKIE_SAMESITE,
     )
     return response
+
 
 async def logout(request: Request) -> Response:
     """GET /auth/logout - Revokes session."""
@@ -316,6 +326,7 @@ async def logout(request: Request) -> Response:
     )
     return response
 
+
 def create_auth_routes() -> Router:
     """
     Creates router with authentication routes.
@@ -323,8 +334,10 @@ def create_auth_routes() -> Router:
     Returns:
         Starlette Router with routes /login, /logout, /process
     """
-    return Router(routes=[
-        Route("/login", login_page, methods=["GET"]),
-        Route("/process", process_login, methods=["POST"]),
-        Route("/logout", logout, methods=["GET"]),
-    ])
+    return Router(
+        routes=[
+            Route("/login", login_page, methods=["GET"]),
+            Route("/process", process_login, methods=["POST"]),
+            Route("/logout", logout, methods=["GET"]),
+        ]
+    )

@@ -18,11 +18,14 @@ logger = logging.getLogger(__name__)
 # Abstract Backend
 # ========================================
 
+
 class RateLimiterBackend(ABC):
     """Abstract rate limiter backend."""
 
     @abstractmethod
-    def is_rate_limited(self, identifier: str, max_attempts: int, window_seconds: int) -> Tuple[bool, int]:
+    def is_rate_limited(
+        self, identifier: str, max_attempts: int, window_seconds: int
+    ) -> Tuple[bool, int]:
         """
         Check if identifier is rate limited.
 
@@ -65,6 +68,7 @@ class RateLimiterBackend(ABC):
 # In-Memory Backend (Single-Pod Only)
 # ========================================
 
+
 class InMemoryRateLimiter(RateLimiterBackend):
     """
     In-memory rate limiter (single-pod only).
@@ -86,7 +90,9 @@ class InMemoryRateLimiter(RateLimiterBackend):
             "   Set DAGSTER_AUTH_REDIS_URL to enable distributed rate limiting."
         )
 
-    def is_rate_limited(self, identifier: str, max_attempts: int, window_seconds: int) -> Tuple[bool, int]:
+    def is_rate_limited(
+        self, identifier: str, max_attempts: int, window_seconds: int
+    ) -> Tuple[bool, int]:
         """Check if identifier is rate limited."""
         now = time.time()
         cutoff = now - window_seconds
@@ -126,6 +132,7 @@ class InMemoryRateLimiter(RateLimiterBackend):
 # Redis Backend (Distributed)
 # ========================================
 
+
 class RedisRateLimiter(RateLimiterBackend):
     """
     Redis-backed rate limiter (distributed, multi-pod safe).
@@ -137,6 +144,7 @@ class RedisRateLimiter(RateLimiterBackend):
     def __init__(self, redis_url: str):
         try:
             import redis
+
             self.redis = redis.from_url(redis_url, decode_responses=True)
 
             # Test connection
@@ -144,13 +152,14 @@ class RedisRateLimiter(RateLimiterBackend):
             logger.info(f"✅ RedisRateLimiter initialized (distributed, url={redis_url})")
         except ImportError:
             raise RuntimeError(
-                "Redis rate limiting requires 'redis' package.\n"
-                "Install with: pip install redis"
+                "Redis rate limiting requires 'redis' package.\n" "Install with: pip install redis"
             )
         except Exception as e:
             raise RuntimeError(f"Failed to connect to Redis: {e}")
 
-    def is_rate_limited(self, identifier: str, max_attempts: int, window_seconds: int) -> Tuple[bool, int]:
+    def is_rate_limited(
+        self, identifier: str, max_attempts: int, window_seconds: int
+    ) -> Tuple[bool, int]:
         """Check if identifier is rate limited."""
         key = f"ratelimit:{identifier}"
 
@@ -203,6 +212,7 @@ class RedisRateLimiter(RateLimiterBackend):
 # Rate Limiter (Orchestrator)
 # ========================================
 
+
 class RateLimiter:
     """
     Main rate limiter class (facade pattern).
@@ -217,7 +227,7 @@ class RateLimiter:
         max_attempts: int = 5,
         window_seconds: int = 300,
         enabled: bool = True,
-        redis_url: Optional[str] = None
+        redis_url: Optional[str] = None,
     ):
         """
         Initialize rate limiter.
@@ -235,6 +245,7 @@ class RateLimiter:
         # Auto-detect Redis URL if not provided
         if redis_url is None:
             import os
+
             redis_url = os.getenv("DAGSTER_AUTH_REDIS_URL")
 
         # Select backend
@@ -278,11 +289,7 @@ class RateLimiter:
         if not self.enabled:
             return False, 0
 
-        return self.backend.is_rate_limited(
-            identifier,
-            self.max_attempts,
-            self.window_seconds
-        )
+        return self.backend.is_rate_limited(identifier, self.max_attempts, self.window_seconds)
 
     def reset(self, identifier: str) -> None:
         """
@@ -320,7 +327,7 @@ def get_rate_limiter() -> RateLimiter:
             max_attempts=config.RATE_LIMIT_MAX_ATTEMPTS,
             window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
             enabled=config.RATE_LIMIT_ENABLED,
-            redis_url=getattr(config, 'REDIS_URL', None),
+            redis_url=getattr(config, "REDIS_URL", None),
         )
 
     return _rate_limiter
@@ -329,6 +336,7 @@ def get_rate_limiter() -> RateLimiter:
 # ========================================
 # Convenience Functions (Backward Compatible)
 # ========================================
+
 
 def record_login_attempt(username: str) -> int:
     """

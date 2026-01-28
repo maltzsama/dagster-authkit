@@ -17,6 +17,8 @@ from dagster_authkit.auth.session import sessions
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
 
+from dagster_authkit.api.health import health_endpoint, metrics_endpoint
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +44,12 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
+
+        if path == "/auth/health":
+            return await health_endpoint(request)
+
+        if path == "/auth/metrics":
+            return await metrics_endpoint(request)
 
         if self._is_public_path(path):
             response = await call_next(request)

@@ -14,7 +14,10 @@ import os
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
+from starlette.routing import Mount, Route
 
+from dagster_authkit.api.health import health_endpoint, metrics_endpoint
+from dagster_authkit.api.routes import create_auth_routes
 from dagster_authkit.auth.backends.base import AuthUser
 
 logger = logging.getLogger(__name__)
@@ -56,13 +59,18 @@ def apply_patches() -> None:
         original_build_routes = webserver_module.DagsterWebserver.build_routes
 
         def patched_build_routes(self):
-            from starlette.routing import Mount
-            from dagster_authkit.api.routes import create_auth_routes
-            from dagster_authkit.api.health import create_health_routes
 
             routes_list = original_build_routes(self)
+
             auth_routes = create_auth_routes()
-            create_health_routes(auth_routes)
+
+            auth_routes.routes.extend(
+                [
+                    Route("/health", health_endpoint, methods=["GET"]),
+                    Route("/metrics", metrics_endpoint, methods=["GET"]),
+                ]
+            )
+
             routes_list.insert(0, Mount("/auth", routes=auth_routes.routes))
             return routes_list
 

@@ -44,10 +44,7 @@ class LDAPAuthBackend(AuthBackend):
         self.base_dn = config["DAGSTER_AUTH_LDAP_BASE_DN"]
 
         # User search filter (default: uid for OpenLDAP)
-        self.user_filter = config.get(
-            "DAGSTER_AUTH_LDAP_USER_FILTER",
-            "(uid={username})"
-        )
+        self.user_filter = config.get("DAGSTER_AUTH_LDAP_USER_FILTER", "(uid={username})")
 
         # TLS settings - string cast to prevent bool-proxy issues
         self.use_tls = str(config.get("DAGSTER_AUTH_LDAP_USE_TLS", "false")).lower() == "true"
@@ -126,7 +123,9 @@ class LDAPAuthBackend(AuthBackend):
             status, result, _, _ = conn.bind()
 
             if not status:
-                logger.warning(f"LDAP: Authentication failed for '{username}': {result.get('description')}")
+                logger.warning(
+                    f"LDAP: Authentication failed for '{username}': {result.get('description')}"
+                )
                 return None
 
             logger.info(f"LDAP: User '{username}' bound successfully")
@@ -152,7 +151,7 @@ class LDAPAuthBackend(AuthBackend):
                 username=username,
                 role=role,
                 email=attrs.get("mail", [""])[0] if attrs.get("mail") else "",
-                full_name=full_name
+                full_name=full_name,
             )
 
         except Exception as e:
@@ -173,7 +172,7 @@ class LDAPAuthBackend(AuthBackend):
                 user=self.bind_dn,
                 password=self.bind_password,
                 client_strategy=SAFE_SYNC,
-                auto_bind=True
+                auto_bind=True,
             )
 
             attrs = self._get_user_attributes(user_dn, conn)
@@ -195,7 +194,7 @@ class LDAPAuthBackend(AuthBackend):
                 username=username,
                 role=role,
                 email=attrs.get("mail", [""])[0] if attrs.get("mail") else "",
-                full_name=full_name
+                full_name=full_name,
             )
         except Exception as e:
             logger.error(f"LDAP: get_user error for '{username}': {e}")
@@ -217,7 +216,7 @@ class LDAPAuthBackend(AuthBackend):
                 user=self.bind_dn,
                 password=self.bind_password,
                 client_strategy=SAFE_SYNC,
-                auto_bind=True
+                auto_bind=True,
             )
 
             status, _, response, _ = conn.search(
@@ -225,11 +224,11 @@ class LDAPAuthBackend(AuthBackend):
                 search_filter=self.user_filter.format(username=escape_filter_chars(username)),
                 search_scope=SUBTREE,
                 attributes=[],
-                size_limit=1
+                size_limit=1,
             )
 
             if status and response:
-                dn = response[0]['dn']
+                dn = response[0]["dn"]
                 conn.unbind()
                 return dn
 
@@ -261,11 +260,11 @@ class LDAPAuthBackend(AuthBackend):
                 search_base=user_dn,
                 search_filter="(objectClass=*)",
                 search_scope="BASE",
-                attributes=attrs_to_fetch
+                attributes=attrs_to_fetch,
             )
 
             if status and response:
-                attrs = response[0].get('attributes', {})
+                attrs = response[0].get("attributes", {})
 
                 # ✅ DEBUG: Ver o que veio do LDAP
                 logger.info(f"🔍 LDAP Attributes for {user_dn}:")
@@ -316,10 +315,10 @@ class LDAPAuthBackend(AuthBackend):
 
     def _get_domain_base_dn(self) -> str:
         """Extract domain base DN from user base DN (remove OU)."""
-        parts = self.base_dn.split(',')
+        parts = self.base_dn.split(",")
         # Remove OUs, keep only DCs
-        domain_parts = [p.strip() for p in parts if p.strip().lower().startswith('dc=')]
-        return ','.join(domain_parts)
+        domain_parts = [p.strip() for p in parts if p.strip().lower().startswith("dc=")]
+        return ",".join(domain_parts)
 
     def _get_user_groups_manually(self, user_dn: str, conn=None) -> List[str]:
         """
@@ -337,7 +336,7 @@ class LDAPAuthBackend(AuthBackend):
                 user=self.bind_dn,
                 password=self.bind_password,
                 client_strategy=SAFE_SYNC,
-                auto_bind=True
+                auto_bind=True,
             )
 
             # Search from domain base to find groups in ou=groups
@@ -354,7 +353,7 @@ class LDAPAuthBackend(AuthBackend):
                 search_base=domain_base,
                 search_filter=search_filter,
                 search_scope=SUBTREE,
-                attributes=['cn']
+                attributes=["cn"],
             )
 
             admin_conn.unbind()  # ✅ Cleanup
@@ -363,7 +362,7 @@ class LDAPAuthBackend(AuthBackend):
             logger.info(f"LDAP: Search response: {response}")
 
             if status and response:
-                groups = [entry['dn'].lower() for entry in response]
+                groups = [entry["dn"].lower() for entry in response]
                 logger.info(f"LDAP: Found {len(groups)} groups for {user_dn}: {groups}")
                 return groups
 
@@ -389,22 +388,24 @@ class LDAPAuthBackend(AuthBackend):
             status, _, response, _ = conn.search(
                 search_base=self.base_dn,
                 search_filter=self.user_filter.replace("{username}", "*"),
-                attributes=["cn", "displayName", "mail", "memberOf"]
+                attributes=["cn", "displayName", "mail", "memberOf"],
             )
 
             users = []
             if status and response:
                 for entry in response:
-                    raw_attrs = entry.get('attributes', {})
-                    username = raw_attrs.get('cn', ["unknown"])[0]
-                    role = self._determine_role(entry['dn'], raw_attrs)
+                    raw_attrs = entry.get("attributes", {})
+                    username = raw_attrs.get("cn", ["unknown"])[0]
+                    role = self._determine_role(entry["dn"], raw_attrs)
 
-                    users.append(AuthUser(
-                        username=username,
-                        role=role,
-                        email=raw_attrs.get("mail", [""])[0],
-                        full_name=raw_attrs.get("displayName", [username])[0],
-                    ))
+                    users.append(
+                        AuthUser(
+                            username=username,
+                            role=role,
+                            email=raw_attrs.get("mail", [""])[0],
+                            full_name=raw_attrs.get("displayName", [username])[0],
+                        )
+                    )
 
             conn.unbind()
             return users
@@ -417,17 +418,25 @@ class LDAPAuthBackend(AuthBackend):
     # ========================================
 
     def add_user(self, *args, **kwargs) -> bool:
-        logger.error("LDAP: Backend does not support add_user(). Manage users in your LDAP/AD server.")
+        logger.error(
+            "LDAP: Backend does not support add_user(). Manage users in your LDAP/AD server."
+        )
         return False
 
     def delete_user(self, *args, **kwargs) -> bool:
-        logger.error("LDAP: Backend does not support delete_user(). Disable users in your LDAP/AD server.")
+        logger.error(
+            "LDAP: Backend does not support delete_user(). Disable users in your LDAP/AD server."
+        )
         return False
 
     def change_password(self, *args, **kwargs) -> bool:
-        logger.error("LDAP: Backend does not support change_password(). Use your domain's native password tools.")
+        logger.error(
+            "LDAP: Backend does not support change_password(). Use your domain's native password tools."
+        )
         return False
 
     def change_role(self, *args, **kwargs) -> bool:
-        logger.error("LDAP: Backend does not support change_role() via API. Manage permissions via LDAP groups.")
+        logger.error(
+            "LDAP: Backend does not support change_role() via API. Manage permissions via LDAP groups."
+        )
         return False
