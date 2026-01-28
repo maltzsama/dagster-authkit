@@ -7,7 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0]: https://github.com/demetrius-mp/dagster-authkit/compare/initial...v0.1.0 - 2026-01-25
+## [0.2.0](https://www.google.com/search?q=%5Bhttps://github.com/demetrius-mp/dagster-authkit/compare/v0.1.0...v0.2.0%5D(https://github.com/demetrius-mp/dagster-authkit/compare/v0.1.0...v0.2.0)) - 2026-01-28
+
+### 🚀 Major Changes
+
+**Multi-Backend Support (SQL & Redis)**
+
+* Added **Peewee ORM** support, enabling connection to **PostgreSQL**, **MySQL**, and **MariaDB**.
+* Added **Redis** backend for production-grade session storage (fixes the issue of logouts on server restart).
+* Introduced `DAGSTER_AUTH_DB_CONNECTION_URL` for flexible database configuration.
+
+**LDAP Integration (Experimental)**
+
+* Added `ldap3` based backend for Active Directory/LDAP integration.
+* *Note: Marked as Experimental/Alpha pending community validation.*
+
+**Refined RBAC (4 Levels)**
+
+* **New Role:** Added `LAUNCHER` role.
+* **Updated Hierarchy:**
+1. **Admin:** Full control.
+2. **Editor:** Can edit code/assets and manage runs.
+3. **Launcher:** Can launch/retry runs but cannot modify code/assets (New).
+4. **Viewer:** Read-only access (GraphQL mutations blocked).
+
+
+
+### ✨ Enhancements
+
+**Health & Observability**
+
+* **Fixed:** `/auth/health` and `/auth/metrics` endpoints were previously returning 404 due to middleware misconfiguration. They are now intercepted correctly.
+* Health checks now return status for the specific backend in use (SQL, Redis, or LDAP).
+
+**Developer Experience**
+
+* Added `examples/` directory with ready-to-use Docker Compose stacks:
+* `quickstart-sqlite`: Zero config.
+* `postgresql_redis`: Production reference architecture.
+* `ldap`: Local OpenLDAP testing setup.
+
+
+* Added `Makefile` in example directories for easy startup (`make up`).
+
+### 🐛 Bug Fixes
+
+* **Middleware Dispatch:** Fixed a critical bug where `call_next` was invoked for internal endpoints (`/auth/health`), causing Dagster to return 404.
+* **Dependency Management:** Clarified optional dependencies in `pyproject.toml` (install via `[postgresql]`, `[redis]`, etc).
+
+### ⚠️ Breaking Changes
+
+* **Project Status:** Downgraded status label from "General Availability" to **BETA**. Use in production at your own risk.
+* **RBAC Logic:** Existing users in database might need role migration if custom roles were manually hacked (standard roles map automatically).
+
+---
+
+## [0.1.0](https://www.google.com/search?q=%5Bhttps://github.com/demetrius-mp/dagster-authkit/releases/tag/v0.1.0%5D(https://github.com/demetrius-mp/dagster-authkit/releases/tag/v0.1.0)) - 2026-01-25
 
 ### 🎉 Initial Release
 

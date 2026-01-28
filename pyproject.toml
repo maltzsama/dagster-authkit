@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dagster-authkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Community Auth System for self-hosted Dagster OSS - RBAC, Audit Logging, and Session Management"
 readme = "README.md"
 requires-python = ">=3.9"
