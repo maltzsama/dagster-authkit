@@ -48,6 +48,7 @@ dependencies = [
     "python-multipart>=0.0.22",
     "peewee>=3.19.0",
     "click>=8.0.0",
+    "graphql-core>=3.2.7"
 ]
 
 [project.optional-dependencies]

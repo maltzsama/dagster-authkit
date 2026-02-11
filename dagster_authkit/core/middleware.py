@@ -4,20 +4,19 @@ Authentication Middleware - Community RBAC Version
 
 import json
 import logging
-import re
 from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from dagster_authkit.api.health import health_endpoint, metrics_endpoint
 from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
+from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
-
-from dagster_authkit.api.health import health_endpoint, metrics_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +70,12 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
             for g_item in queries:
                 query_str = g_item.get("query", "")
-                if self._is_mutation(query_str):
-                    mutation_name = self._extract_graphql_field_name(query_str)
+                mutation_names = GraphQLMutationAnalyzer.extract_mutation_names(query_str)
+
+                if not mutation_names:
+                    continue
+
+                for mutation_name in mutation_names:
                     required_role = RolePermissions.get_required_role(mutation_name)
 
                     if required_role and not user.can(required_role):
@@ -80,6 +83,7 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
                         return self._generate_dagster_error_response(
                             user, mutation_name, required_role
                         )
+
 
             async def receive():
                 return {"type": "http.request", "body": body}
@@ -115,18 +119,6 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
     def _is_public_path(self, path: str) -> bool:
         return path in self.PUBLIC_PATHS or any(path.startswith(p) for p in self.PUBLIC_PREFIXES)
-
-    @staticmethod
-    def _is_mutation(query: str) -> bool:
-        return "mutation" in query.lower()[:100]
-
-    @staticmethod
-    def _extract_graphql_field_name(query: str) -> str:
-        """v1.0 Robust Regex: Handles comments, aliases, and formatting."""
-        clean_query = re.sub(r"#.*", "", query)
-        pattern = r"mutation[^{]*\{\s*(?:[\w\d_]+\s*:\s*)?([\w\d_]+)"
-        match = re.search(pattern, clean_query, re.IGNORECASE | re.DOTALL)
-        return match.group(1) if match else "unknown"
 
     @staticmethod
     def _log_denied(user, action, role):
