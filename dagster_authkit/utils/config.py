@@ -101,6 +101,13 @@ class AuthConfig:
         if len(self.SECRET_KEY) < 16:
             raise ValueError("SECRET_KEY must be at least 16 characters")
 
+        if self.REDIS_URL:
+            if not self.REDIS_URL.startswith(("redis://", "rediss://")):
+                raise ValueError(
+                    f"Invalid REDIS_URL format: {self.REDIS_URL}\n"
+                    "Must start with redis:// or rediss://"
+                )
+
     def __repr__(self):
         """Safe representation hiding sensitive data."""
         return (

@@ -18,6 +18,7 @@ from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
 from dagster_authkit.utils.templates import render_403_page
+from dagster_authkit.api.health import track_rbac_decision
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +82,22 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
                     if required_role and not user.can(required_role):
                         self._log_denied(user, mutation_name, required_role)
+
+                        track_rbac_decision(
+                            allowed=False,
+                            role=user.role.name,
+                            action=mutation_name
+                        )
+
                         return self._generate_dagster_error_response(
                             user, mutation_name, required_role
+                        )
+
+                    if required_role:
+                        track_rbac_decision(
+                            allowed=True,
+                            role=user.role.name,
+                            action=mutation_name
                         )
 
 

@@ -33,9 +33,7 @@ class GraphQLMutationAnalyzer:
             return GraphQLMutationAnalyzer._find_mutations_in_ast(ast)
         except Exception as e:
             logger.warning(f"Failed to parse GraphQL query: {e}")
-            if "mutation" in query.lower():
-                return {"unknown_mutation"}
-            return set()
+            return {"__UNPARSEABLE_QUERY__"}
 
     @staticmethod
     def _find_mutations_in_ast(ast: DocumentNode) -> Set[str]:

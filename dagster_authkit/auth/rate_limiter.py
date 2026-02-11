@@ -182,16 +182,16 @@ class RedisRateLimiter(RateLimiterBackend):
             return False, 0
 
     def record_attempt(self, identifier: str, window_seconds: int) -> int:
-        """Record failed attempt with auto-expiration."""
         key = f"ratelimit:{identifier}"
 
         try:
-            # Atomic increment
             count = self.redis.incr(key)
-            self.redis.expire(key, window_seconds)
+            self.redis.expire(key, window_seconds, nx=True)
 
             logger.debug(f"Rate limit attempt recorded: {identifier} ({count})")
+
             return count
+
         except Exception as e:
             logger.error(f"Redis rate limit record failed: {e}")
             return 0
