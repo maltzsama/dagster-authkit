@@ -17,6 +17,7 @@ from dagster_authkit.auth.session import sessions
 from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
+from dagster_authkit.utils.templates import render_403_page
 
 logger = logging.getLogger(__name__)
 
@@ -155,48 +156,5 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _forbidden_html_response(user: AuthUser, path: str, method: str, reason: str) -> Response:
-        """Generate HTML 403 response."""
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>403 Forbidden</title>
-            <style>
-                body {{
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-                    background-color: #0f111a;
-                    color: white;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                }}
-                .container {{
-                    text-align: center;
-                    border: 1px solid #333;
-                    padding: 40px;
-                    border-radius: 12px;
-                    background: #1a1d29;
-                    max-width: 500px;
-                }}
-                h1 {{ color: #ff6b6b; margin: 0 0 20px 0; }}
-                .info {{ color: #888; margin: 10px 0; }}
-                .detail {{ font-size: 12px; color: #555; margin-top: 20px; }}
-                a {{ color: #667eea; text-decoration: none; margin-top: 20px; display: inline-block; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🔒 403 Forbidden</h1>
-                <p class="info">
-                    User <strong>{user.username}</strong> (role: <strong>{user.role.name}</strong>)
-                    cannot <strong>{method}</strong> on <strong>{path}</strong>.
-                </p>
-                <p class="detail">Reason: {reason}</p>
-                <a href="/">← Return to Dashboard</a>
-            </div>
-        </body>
-        </html>
-        """
+        html = render_403_page(user, path, method, reason)
         return Response(content=html, status_code=403, media_type="text/html")
