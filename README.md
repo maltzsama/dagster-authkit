@@ -158,11 +158,19 @@ dagster-authkit list-users
 
 This project belongs to the community.
 
-**Current Priorities:**
+**Philosophy:** Keep it simple. This is RBAC for Dagster, not an enterprise auth platform.
 
-1. **LDAP Validation:** The feature is implemented (`dagster_authkit/auth/backends/ldap.py`), but **we need the community to test it in real AD environments**.
-2. **Keycloak Integration:** Support for external Identity Providers (IdP) via OIDC/Keycloak.
-3. **Stability:** Improving GraphQL query analysis for better mutation detection.
+### Current (v0.2.0)
+* Username/password auth (bcrypt)
+* 4-level RBAC (ADMIN/EDITOR/LAUNCHER/VIEWER)
+* SQLite, PostgreSQL, MySQL, Redis support
+* GraphQL mutation blocking
+* LDAP (experimental, community testing needed)
+
+**Priorities to next version:**
+
+* **Proxy Auth Mode:** Work with `Authelia`/`Authentik`/`oauth2-proxy` for auth
+1. **Stability:** Improving GraphQL query analysis for better mutation detection.
 
 **What we will NOT do:**
 
