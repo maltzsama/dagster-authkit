@@ -6,6 +6,7 @@ Matched with the finalized Peewee SQL Backend and stdout Audit Logging.
 """
 
 import logging
+
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
@@ -26,7 +27,6 @@ from dagster_authkit.utils.audit import (
 )
 from dagster_authkit.utils.config import config
 from dagster_authkit.utils.templates import render_login_page
-
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,20 @@ async def process_login(request: Request) -> Response:
 
 
 async def logout(request: Request) -> Response:
-    """GET /auth/logout - Revokes session."""
+    """
+    GET /auth/logout - Revokes session.
+
+    Behavior:
+    - Proxy mode: Redirects to Authelia logout URL
+    - Session mode: Revokes local session cookie
+    """
+    from dagster_authkit.utils.config import config
+
+    if config.AUTH_BACKEND == "proxy":
+        logout_url = config.DAGSTER_AUTH_PROXY_LOGOUT_URL
+        logger.info(f"Proxy mode: Redirecting logout to {logout_url}")
+        return RedirectResponse(url=logout_url, status_code=302)
+
     session_token = request.cookies.get(config.SESSION_COOKIE_NAME)
     username = "unknown"
 

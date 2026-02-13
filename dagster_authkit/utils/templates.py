@@ -3,6 +3,7 @@ HTML Templates - Centralized UI Components
 All HTML/CSS/JS strings for AuthKit interface.
 """
 
+
 def render_login_page(next_url: str = "/", error: str = "") -> str:
     html = f"""
             <!DOCTYPE html>
@@ -247,6 +248,7 @@ def render_403_page(user, path: str, method: str, reason: str) -> str:
             </html>
             """
     return html
+
 
 def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool) -> str:
     html = f"""

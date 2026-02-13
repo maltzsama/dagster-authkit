@@ -68,6 +68,25 @@ class AuthConfig:
         self.OAUTH_TOKEN_URL = os.getenv("OAUTH_TOKEN_URL")
         self.OAUTH_USERINFO_URL = os.getenv("OAUTH_USERINFO_URL")
 
+        # PROXY AUTH SETTINGS (Authelia Forward Auth)
+        self.DAGSTER_AUTH_PROXY_USER_HEADER = os.getenv(
+            "DAGSTER_AUTH_PROXY_USER_HEADER", "Remote-User"
+        )
+        self.DAGSTER_AUTH_PROXY_GROUPS_HEADER = os.getenv(
+            "DAGSTER_AUTH_PROXY_GROUPS_HEADER", "Remote-Groups"
+        )
+        self.DAGSTER_AUTH_PROXY_EMAIL_HEADER = os.getenv(
+            "DAGSTER_AUTH_PROXY_EMAIL_HEADER", "Remote-Email"
+        )
+        self.DAGSTER_AUTH_PROXY_NAME_HEADER = os.getenv(
+            "DAGSTER_AUTH_PROXY_NAME_HEADER", "Remote-Name"
+        )
+        self.DAGSTER_AUTH_PROXY_GROUP_PATTERN = os.getenv("DAGSTER_AUTH_PROXY_GROUP_PATTERN")
+
+        self.DAGSTER_AUTH_PROXY_LOGOUT_URL = os.getenv(
+            "DAGSTER_AUTH_PROXY_LOGOUT_URL", "https://auth.company.com/logout"
+        )
+
         # Admin Bootstrap (Used by SQL Backend)
         self.ADMIN_PASSWORD = os.getenv("DAGSTER_AUTH_ADMIN_PASSWORD", "")
 
@@ -88,7 +107,7 @@ class AuthConfig:
 
     def _validate(self):
         """Validate configuration settings with support for the new SQL backend."""
-        valid_backends = ["dummy", "ldap", "oauth", "sqlite", "sql"]
+        valid_backends = ["dummy", "ldap", "oauth", "sqlite", "sql", "proxy"]
         if self.AUTH_BACKEND not in valid_backends:
             raise ValueError(
                 f"Invalid AUTH_BACKEND: {self.AUTH_BACKEND}. "
