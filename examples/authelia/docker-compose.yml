@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # CADDY (O Porteiro que realmente funciona)
+  # ========================================
+  caddy:
+    image: caddy:2.8
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - authelia-net
+    depends_on:
+      - authelia
+      - dagster
+    restart: unless-stopped
+
+  # ========================================
+  # LDAP + SEED (Banco de Usuários)
+  # ========================================
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: dagster-ldap
+    command: --copy-service --loglevel debug
+    environment:
+      LDAP_ORGANISATION: "Company"
+      LDAP_DOMAIN: "company.com"
+      LDAP_ADMIN_PASSWORD: "adminpassword"
+      LDAP_CONFIG_PASSWORD: "configpassword"
+      LDAP_RFC2307BIS_SCHEMA: "true"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "true"
+      LDAP_TLS: "false"
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+    networks:
+      - authelia-net
+    healthcheck:
+      test: ["CMD", "ldapwhoami", "-x", "-H", "ldap://localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  ldap-seed:
+    image: osixia/openldap:1.5.0
+    container_name: dagster-ldap-seed
+    depends_on:
+      ldap:
+        condition: service_healthy
+    networks:
+      - authelia-net
+    volumes:
+      - ./ldap/bootstrap.ldif:/bootstrap.ldif:ro
+    entrypoint: >
+      bash -c "
+      echo '⏳ Waiting for LDAP...' &&
+      sleep 5 &&
+      ldapadd -x -H ldap://ldap:389 -D 'cn=admin,dc=company,dc=com' -w adminpassword -f /bootstrap.ldif &&
+      echo '✅ LDAP seeded!' &&
+      exit 0
+      "
+    restart: "no"
+
+  # ========================================
+  # AUTHELIA v4.38
+  # ========================================
+  authelia:
+    image: authelia/authelia:4.38
+    container_name: dagster-authelia
+    volumes:
+      - ./authelia:/config
+    networks:
+      - authelia-net
+    environment:
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: "a_very_important_secret_change_me"
+      AUTHELIA_SESSION_SECRET: "another_very_important_secret_change_me"
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f61234"
+    depends_on:
+      ldap:
+        condition: service_healthy
+      ldap-seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ========================================
+  # DAGSTER (AuthKit)
+  # ========================================
+  dagster:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+      args:
+        EXTRAS: "sqlite"
+    container_name: dagster-authkit
+    command: ["-h", "0.0.0.0", "-p", "3000", "--empty-workspace"]
+    environment:
+      DAGSTER_AUTH_BACKEND: "proxy"
+      DAGSTER_AUTH_PROXY_LOGIN_URL: "https://auth.company.com" 
+      DAGSTER_AUTH_PROXY_LOGOUT_URL: "https://auth.company.com/logout"
+      DAGSTER_AUTH_PROXY_USER_HEADER: "Remote-User"
+      DAGSTER_AUTH_PROXY_GROUPS_HEADER: "Remote-Groups"
+      DAGSTER_AUTH_PROXY_EMAIL_HEADER: "Remote-Email"
+      DAGSTER_AUTH_PROXY_NAME_HEADER: "Remote-Name"
+      DAGSTER_AUTH_PROXY_GROUP_PATTERN: "cn={role},ou=groups,dc=company,dc=com"
+      DAGSTER_AUTH_DEBUG: "true"
+      DAGSTER_HOME: "/opt/dagster/dagster_home"
+    networks:
+      - authelia-net
+    restart: unless-stopped
+
+networks:
+  authelia-net:
+    driver: bridge
+
+volumes:
+  ldap-data:
+  ldap-config:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,107 @@
+# examples/authelia/ldap/bootstrap.ldif
+
+# ========================================
+# Users OU
+# ========================================
+dn: ou=users,dc=company,dc=com
+objectClass: organizationalUnit
+ou: users
+
+# ========================================
+# Groups OU
+# ========================================
+dn: ou=groups,dc=company,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+# ========================================
+# Test Users
+# ========================================
+
+# Admin User
+dn: uid=admin,ou=users,dc=company,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: admin
+cn: Admin User
+sn: User
+displayName: Admin User
+mail: admin@company.com
+uidNumber: 1001
+gidNumber: 1001
+homeDirectory: /home/admin
+userPassword: password123
+
+# Editor User
+dn: uid=editor,ou=users,dc=company,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: editor
+cn: Editor User
+sn: User
+displayName: Editor User
+mail: editor@company.com
+uidNumber: 1002
+gidNumber: 1002
+homeDirectory: /home/editor
+userPassword: password123
+
+# Launcher User
+dn: uid=launcher,ou=users,dc=company,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: launcher
+cn: Launcher User
+sn: User
+displayName: Launcher User
+mail: launcher@company.com
+uidNumber: 1003
+gidNumber: 1003
+homeDirectory: /home/launcher
+userPassword: password123
+
+# Viewer User
+dn: uid=viewer,ou=users,dc=company,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: viewer
+cn: Viewer User
+sn: User
+displayName: Viewer User
+mail: viewer@company.com
+uidNumber: 1004
+gidNumber: 1004
+homeDirectory: /home/viewer
+userPassword: password123
+
+# ========================================
+# Groups
+# ========================================
+
+# Admins Group
+dn: cn=admins,ou=groups,dc=company,dc=com
+objectClass: groupOfNames
+cn: admins
+member: uid=admin,ou=users,dc=company,dc=com
+
+# Editors Group
+dn: cn=editors,ou=groups,dc=company,dc=com
+objectClass: groupOfNames
+cn: editors
+member: uid=editor,ou=users,dc=company,dc=com
+
+# Launchers Group
+dn: cn=launchers,ou=groups,dc=company,dc=com
+objectClass: groupOfNames
+cn: launchers
+member: uid=launcher,ou=users,dc=company,dc=com
+
+# Viewers Group
+dn: cn=viewers,ou=groups,dc=company,dc=com
+objectClass: groupOfNames
+cn: viewers
+member: uid=viewer,ou=users,dc=company,dc=com
