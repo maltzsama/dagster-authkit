@@ -48,6 +48,7 @@ dependencies = [
     "python-multipart>=0.0.22",
     "peewee>=3.19.0",
     "click>=8.0.0",
+    "graphql-core>=3.2.7"
 ]
 
 [project.optional-dependencies]
@@ -90,6 +91,7 @@ dummy = "dagster_authkit.auth.backends.dummy:DummyAuthBackend"
 sql = "dagster_authkit.auth.backends.sql:PeeweeAuthBackend"
 sqlite = "dagster_authkit.auth.backends.sql:PeeweeAuthBackend" # Alias for compatibility
 ldap = "dagster_authkit.auth.backends.ldap:LDAPAuthBackend"
+proxy = "dagster_authkit.auth.backends.proxy:ProxyAuthBackend"
 
 [tool.setuptools.packages.find]
 where = ["."]
