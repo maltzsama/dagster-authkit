@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ldap
+  namespace: authkit-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ldap
+  template:
+    metadata:
+      labels:
+        app: ldap
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: ldap
+          image: osixia/openldap:1.5.0
+          args: ["--copy-service", "--loglevel", "debug"]
+          ports:
+            - containerPort: 389
+          env:
+            - name: LDAP_ORGANISATION
+              value: "Company"
+            - name: LDAP_DOMAIN
+              value: "company.com"
+            - name: LDAP_ADMIN_PASSWORD
+              value: "adminpassword"
+            - name: LDAP_CONFIG_PASSWORD
+              value: "configpassword"
+            - name: LDAP_RFC2307BIS_SCHEMA
+              value: "true"
+            - name: LDAP_REMOVE_CONFIG_AFTER_SETUP
+              value: "true"
+            - name: LDAP_TLS
+              value: "false"
+            # Seed path — o container importa UMA VEZ e marca como feito
+            - name: LDAP_SEED_INTERNAL_LDIF_PATH
+              value: "/ldif-seed"
+          volumeMounts:
+            # LDIF seed data
+            - name: bootstrap-data
+              mountPath: /ldif-seed
+            # Persistência do SLAPD entre restarts do container
+            - name: ldap-data
+              mountPath: /var/lib/ldap
+            - name: ldap-config
+              mountPath: /etc/ldap/slapd.d
+      volumes:
+        - name: bootstrap-data
+          configMap:
+            name: ldap-bootstrap
+        - name: ldap-data
+          emptyDir: {}
+        - name: ldap-config
+          emptyDir: {}

@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddy-config
+  namespace: authkit-demo
+data:
+  Caddyfile: |
+    {
+        local_certs
+    }
+
+    # Porta Genérica (Healthcheck)
+    :443 {
+        tls internal
+        respond /health "OK" 200
+    }
+
+    # Authelia
+    auth.company.com {
+        tls internal
+        reverse_proxy authelia:9091
+    }
+
+    # Dagster (Protegido)
+    dagster.company.com {
+        tls internal
+        
+        # 1. Pergunta pro Authelia: "Esse cara pode passar?"
+        forward_auth authelia:9091 {
+            uri /api/authz/forward-auth
+            # Se o Authelia disser SIM, ele devolve esses headers
+            copy_headers {
+                Remote-User
+                Remote-Groups
+                Remote-Email
+                Remote-Name
+            }
+        }
+        
+        # 2. Se passou, manda pro Dagster
+        reverse_proxy dagster:3000
+    }

@@ -1,0 +1,64 @@
+---
+server:
+  address: 'tcp://:9091'
+  disable_healthcheck: false
+
+log:
+  level: debug
+
+theme: auto
+
+identity_validation:
+  reset_password:
+    jwt_secret: a_very_important_secret_change_me
+
+authentication_backend:
+  ldap:
+    implementation: custom
+    address: ldap://ldap:389
+    timeout: 20s
+    start_tls: false
+    base_dn: dc=company,dc=com
+    additional_users_dn: ou=users
+    users_filter: (&({username_attribute}={input})(objectClass=person))
+    additional_groups_dn: ou=groups
+    groups_filter: (&(member={dn})(objectClass=groupOfNames))
+    user: cn=admin,dc=company,dc=com
+    password: adminpassword
+    attributes:
+      username: uid
+      display_name: displayName
+      mail: mail
+      group_name: cn
+
+access_control:
+  default_policy: deny
+  rules:
+    - domain: "auth.company.com"
+      policy: one_factor
+    - domain: "dagster.company.com"
+      policy: one_factor
+
+session:
+  name: authelia_session
+  same_site: lax
+  secret: another_very_important_secret_change_me
+  expiration: 1h
+  inactivity: 5m
+  cookies:
+    - domain: 'company.com'
+      authelia_url: 'https://auth.company.com'
+      default_redirection_url: 'https://dagster.company.com'
+
+regulation:
+  max_retries: 5
+  find_time: 2m
+  ban_time: 5m
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /config/notification.txt

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dagster
+  namespace: authkit-demo
+spec:
+  selector:
+    app: dagster
+  ports:
+  - port: 3000
+    targetPort: 3000

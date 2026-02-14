@@ -91,6 +91,7 @@ dummy = "dagster_authkit.auth.backends.dummy:DummyAuthBackend"
 sql = "dagster_authkit.auth.backends.sql:PeeweeAuthBackend"
 sqlite = "dagster_authkit.auth.backends.sql:PeeweeAuthBackend" # Alias for compatibility
 ldap = "dagster_authkit.auth.backends.ldap:LDAPAuthBackend"
+proxy = "dagster_authkit.auth.backends.proxy:ProxyAuthBackend"
 
 [tool.setuptools.packages.find]
 where = ["."]

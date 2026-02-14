@@ -1,5 +1,7 @@
+# dagster_authkit/core/middleware.py
 """
 Authentication Middleware - Community RBAC Version
+NOW with Proxy Auth support (Authelia)
 """
 
 import json
@@ -10,15 +12,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-from dagster_authkit.api.health import health_endpoint, metrics_endpoint
+from dagster_authkit.api.health import health_endpoint, metrics_endpoint, track_rbac_decision
 from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
 from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer
+from dagster_authkit.core.registry import get_backend
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config
 from dagster_authkit.utils.templates import render_403_page
-from dagster_authkit.api.health import track_rbac_decision
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,18 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
 
     WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
+    def __init__(self, app):
+        super().__init__(app)
+
+        self.is_proxy_mode = config.AUTH_BACKEND == "proxy"
+
+        if self.is_proxy_mode:
+            self.proxy_backend = get_backend("proxy", config.__dict__)
+            logger.info("🔒 Middleware: PROXY MODE enabled (Authelia forward auth)")
+        else:
+            self.proxy_backend = None
+            logger.info(f"🔒 Middleware: SESSION MODE (backend={config.AUTH_BACKEND})")
+
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
@@ -52,19 +66,36 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
         if path == "/auth/metrics":
             return await metrics_endpoint(request)
 
-        if self._is_public_path(path):
+        if self.is_proxy_mode and path in ["/auth/login", "/auth/process"]:
+            return Response(
+                content="This endpoint is disabled in proxy auth mode. Authentication is handled by Authelia.",
+                status_code=404,
+            )
+
+        if self._is_public_path(path) and not self.is_proxy_mode:
             response = await call_next(request)
             return SecurityHardening.set_security_headers(response)
 
-        # 1. Validation via v1.0 Manager
-        user = self._get_authenticated_user(request)
-        if not user:
-            # Better UX: 401 for APIs, 302 for humans
-            if path == "/graphql" or request.headers.get("x-requested-with") == "XMLHttpRequest":
-                return Response(content="Unauthorized", status_code=401)
-            return RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
+        # PROXY or SESSION
+        if self.is_proxy_mode:
+            user = self._get_user_from_proxy(request)
+            if not user:
+                return Response(
+                    content="Unauthorized: Missing authentication headers from proxy",
+                    status_code=401,
+                )
+        else:
+            user = self._get_authenticated_user(request)
+            if not user:
+                # Better UX: 401 for APIs, 302 for humans
+                if (
+                    path == "/graphql"
+                    or request.headers.get("x-requested-with") == "XMLHttpRequest"
+                ):
+                    return Response(content="Unauthorized", status_code=401)
+                return RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
 
-        # 2. GraphQL Mutation RBAC
+        # RBAC: GraphQL Mutations
         if path == "/graphql" and method == "POST":
             body = await request.body()
             graphql_data = self._parse_json(body)
@@ -84,9 +115,7 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
                         self._log_denied(user, mutation_name, required_role)
 
                         track_rbac_decision(
-                            allowed=False,
-                            role=user.role.name,
-                            action=mutation_name
+                            allowed=False, role=user.role.name, action=mutation_name
                         )
 
                         return self._generate_dagster_error_response(
@@ -94,19 +123,14 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
                         )
 
                     if required_role:
-                        track_rbac_decision(
-                            allowed=True,
-                            role=user.role.name,
-                            action=mutation_name
-                        )
-
+                        track_rbac_decision(allowed=True, role=user.role.name, action=mutation_name)
 
             async def receive():
                 return {"type": "http.request", "body": body}
 
             request = Request(request.scope, receive=receive)
 
-        # 3. REST RBAC
+        # REST RBAC
         elif method in self.WRITE_METHODS and not user.can(Role.EDITOR):
             self._log_denied(user, f"REST_{method}_{path}", Role.EDITOR)
             return self._forbidden_html_response(user, path, method, "REQUIRES_EDITOR")
@@ -115,8 +139,27 @@ class DagsterAuthMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return SecurityHardening.set_security_headers(response)
 
-    # --- Helper Methods ---
+    def _get_user_from_proxy(self, request: Request) -> Optional[AuthUser]:
+        """
+        Extrai user dos headers do Authelia (modo proxy).
+        """
+        if not self.proxy_backend:
+            return None
 
+        # Converte Starlette headers pra dict
+        headers_dict = dict(request.headers)
+
+        # Usa o backend proxy pra parsear
+        user = self.proxy_backend.get_user_from_headers(headers_dict)
+
+        if user:
+            logger.debug(f"✅ Proxy auth: {user.username} ({user.role.name})")
+        else:
+            logger.warning("❌ Proxy auth: Failed to extract user from headers")
+
+        return user
+
+    # Helper Methods
     def _get_authenticated_user(self, request: Request) -> Optional[AuthUser]:
         token = request.cookies.get(config.SESSION_COOKIE_NAME)
         if not token:
