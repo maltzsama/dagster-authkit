@@ -28,7 +28,8 @@ If DAGSTER_AUTH_PROXY_GROUP_PATTERN is not set, falls back to simple matching:
 
 import logging
 from typing import Any, Dict, List, Optional
-
+import json
+import re
 from dagster_authkit.auth.backends.base import AuthBackend, AuthUser, Role
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,99 @@ class ProxyAuthBackend(AuthBackend):
             f"  Name header: {self.name_header}\n"
             f"  Group mappings: {self.group_mappings}"
         )
+
+    def _parse_groups_header(self, groups_raw: str) -> List[str]:
+        """
+        Parse groups header using multiple fallback strategies.
+
+        Parsing strategies (in order):
+        1. JSON array parsing
+        2. LDAP DN detection (preserves internal commas)
+        3. Multi-delimiter split (comma, semicolon, pipe)
+        4. Whitespace split (fallback)
+
+        Args:
+            groups_raw: Raw groups header value from upstream proxy
+
+        Returns:
+            List of normalized group names (lowercased, deduplicated)
+
+        Examples:
+            '["admin","editor"]' -> ['admin', 'editor']
+            'admin,editor,viewer' -> ['admin', 'editor', 'viewer']
+            'cn=admins,ou=groups;cn=editors,ou=groups' -> ['cn=admins,ou=groups', 'cn=editors,ou=groups']
+        """
+        import json
+
+        if not groups_raw:
+            return []
+
+        groups_raw = groups_raw.strip()
+        groups = []
+
+        # Strategy 1: Attempt JSON array parsing
+        if groups_raw.startswith("[") and groups_raw.endswith("]"):
+            try:
+                parsed = json.loads(groups_raw)
+                if isinstance(parsed, list):
+                    groups = [str(g).strip() for g in parsed if g]
+                    logger.debug(f"   Parsed as JSON array: {len(groups)} groups")
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.debug(f"   JSON parse failed: {e}")
+
+        # Strategy 2: LDAP DN detection
+        # Check for LDAP-specific patterns (equals sign with ou= or dc= components)
+        if (
+            not groups
+            and ("=" in groups_raw)
+            and ("ou=" in groups_raw.lower() or "dc=" in groups_raw.lower())
+        ):
+            # Split LDAP DNs by common delimiters (semicolon or pipe)
+            # Avoid splitting on commas as they are part of the DN structure
+            for delimiter in [";", "|"]:
+                if delimiter in groups_raw:
+                    groups = [g.strip() for g in groups_raw.split(delimiter) if g.strip()]
+                    logger.debug(
+                        f"   Parsed as LDAP DNs (delimiter '{delimiter}'): {len(groups)} groups"
+                    )
+                    break
+
+            # If no delimiter found, treat as single DN
+            if not groups:
+                groups = [groups_raw]
+                logger.debug(f"   Parsed as single LDAP DN")
+
+        # Strategy 3: Multi-delimiter split
+        # Try common delimiters in priority order
+        if not groups:
+            for delimiter in [",", ";", "|"]:
+                if delimiter in groups_raw:
+                    candidate = [g.strip() for g in groups_raw.split(delimiter) if g.strip()]
+                    # Validation: ensure split produced meaningful results
+                    if len(candidate) > 1 or (len(candidate) == 1 and candidate[0]):
+                        groups = candidate
+                        logger.debug(
+                            f"   Parsed with delimiter '{delimiter}': {len(groups)} groups"
+                        )
+                        break
+
+        # Strategy 4: Whitespace split (fallback)
+        if not groups:
+            groups = groups_raw.split()
+            logger.debug(f"   Parsed with whitespace split: {len(groups)} groups")
+
+        # Normalize and deduplicate
+        normalized = []
+        seen = set()
+
+        for g in groups:
+            g_lower = g.strip().lower()
+            if g_lower and g_lower not in seen:
+                seen.add(g_lower)
+                normalized.append(g_lower)
+
+        logger.debug(f"   Final normalized groups: {normalized}")
+        return normalized
 
     def get_name(self) -> str:
         return "proxy"
@@ -158,7 +252,7 @@ class ProxyAuthBackend(AuthBackend):
 
         # Extract groups (for role mapping)
         groups_raw = headers_lower.get(self.groups_header.lower(), "")
-        groups = [g.strip().lower() for g in groups_raw.split(",") if g.strip()]
+        groups = self._parse_groups_header(groups_raw)
 
         # Determine role from groups
         role = self._determine_role_from_groups(groups)
