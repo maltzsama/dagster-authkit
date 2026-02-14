@@ -56,13 +56,22 @@ class RedisBackend(SessionBackend):
 
     def revoke(self, token: str) -> bool:
         """Revokes a single session."""
-        data = self.validate(token)
-        if data:
-            username = data.get("username")
-            # Clean up the user's token set
-            self.client.srem(f"user_sess:{username}", token)
+        key = f"sess:{token}"
 
-        return bool(self.client.delete(f"sess:{token}"))
+        data_str = self.client.get(key)
+
+        if data_str:
+            try:
+                data = json.loads(data_str)
+                username = data.get("username")
+                if username:
+                    self.client.srem(f"user_sess:{username}", token)
+
+            except Exception as e:
+                logger.warning(f"Failed to parse session data during revoke: {e}")
+
+        deleted = self.client.delete(key)
+        return bool(deleted)
 
     def revoke_all(self, username: str) -> int:
         key = f"user_sess:{username}"

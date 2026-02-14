@@ -1,0 +1,42 @@
+# examples/authelia/authelia/users_database.yml
+---
+###############################################################
+#                         Users Database                      #
+###############################################################
+
+# This file can be used if you do not have an LDAP set up.
+# For this example, we are using LDAP, so this file is OPTIONAL.
+# It is included here in case you want to test without LDAP.
+
+users:
+  admin:
+    disabled: false
+    displayname: "Admin User"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$TWFU/wxWP9XVLC6qB5XjBw$VJhxFPYcZEqrZLjKuL8K3p9YOx5kLcITXGJGfzNQzMM"  # password123
+    email: admin@company.com
+    groups:
+      - admins
+
+  editor:
+    disabled: false
+    displayname: "Editor User"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$TWFU/wxWP9XVLC6qB5XjBw$VJhxFPYcZEqrZLjKuL8K3p9YOx5kLcITXGJGfzNQzMM"
+    email: editor@company.com
+    groups:
+      - editors
+
+  launcher:
+    disabled: false
+    displayname: "Launcher User"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$TWFU/wxWP9XVLC6qB5XjBw$VJhxFPYcZEqrZLjKuL8K3p9YOx5kLcITXGJGfzNQzMM"
+    email: launcher@company.com
+    groups:
+      - launchers
+
+  viewer:
+    disabled: false
+    displayname: "Viewer User"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$TWFU/wxWP9XVLC6qB5XjBw$VJhxFPYcZEqrZLjKuL8K3p9YOx5kLcITXGJGfzNQzMM"
+    email: viewer@company.com
+    groups:
+      - viewers

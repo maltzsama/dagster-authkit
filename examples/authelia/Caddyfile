@@ -1,0 +1,30 @@
+{
+    # Certificados internos
+    local_certs
+}
+
+auth.company.com {
+    tls internal
+    log
+    
+    # Tudo vai pro Authelia (sem handle_path específico)
+    reverse_proxy authelia:9091
+}
+
+dagster.company.com {
+    tls internal
+    log
+    
+    # Forward auth - verifica com Authelia antes de passar pro Dagster
+    forward_auth authelia:9091 {
+        uri /api/authz/forward-auth
+        copy_headers {
+            Remote-User
+            Remote-Groups
+            Remote-Email
+            Remote-Name
+        }
+    }
+    
+    reverse_proxy dagster:3000
+}

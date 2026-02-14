@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ldap
+  namespace: authkit-demo
+spec:
+  ports:
+    - port: 389
+      targetPort: 389
+  selector:
+    app: ldap

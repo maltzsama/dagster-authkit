@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster
+  namespace: authkit-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dagster
+  template:
+    metadata:
+      labels:
+        app: dagster
+    spec:
+      containers:
+      - name: dagster
+        image: dagster-authkit:local
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+        args: ["-h", "0.0.0.0", "-p", "3000", "--empty-workspace"]
+        env:
+          - name: DAGSTER_HOME
+            value: "/opt/dagster/dagster_home"
+          - name: DAGSTER_AUTH_BACKEND
+            value: "proxy"
+          - name: DAGSTER_AUTH_PROXY_LOGIN_URL
+            value: "https://auth.company.com"
+          - name: DAGSTER_AUTH_PROXY_LOGOUT_URL
+            value: "https://auth.company.com/logout"
+          - name: DAGSTER_AUTH_PROXY_USER_HEADER
+            value: "Remote-User"
+          - name: DAGSTER_AUTH_PROXY_GROUPS_HEADER
+            value: "Remote-Groups"
+          - name: DAGSTER_AUTH_PROXY_EMAIL_HEADER
+            value: "Remote-Email"
+          - name: DAGSTER_AUTH_PROXY_NAME_HEADER
+            value: "Remote-Name"
+          - name: DAGSTER_AUTH_PROXY_GROUP_PATTERN
+            value: "cn={role},ou=groups,dc=company,dc=com"
+          - name: DAGSTER_AUTH_DEBUG
+            value: "true"

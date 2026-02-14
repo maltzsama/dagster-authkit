@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy
+  namespace: authkit-demo
+spec:
+  # Mudamos para LoadBalancer para aceitar tráfego na porta 443 real
+  type: LoadBalancer
+  selector:
+    app: caddy
+  ports:
+  - name: https
+    port: 443
+    targetPort: 443

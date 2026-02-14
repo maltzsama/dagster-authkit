@@ -136,7 +136,7 @@ def get_health_status() -> Dict[str, Any]:
     health = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "0.2.0",
+        "version": "0.3.0",
         "backend": config.AUTH_BACKEND,
         "checks": {},
     }

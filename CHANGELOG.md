@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-02-14
+
+### 🚀 Major Changes
+
+**Proxy Authentication Mode (Stable)**
+* Added `ProxyAuthBackend` for delegating authentication to external reverse proxies (Authelia, Traefik, Caddy, oauth2-proxy)
+* User identity extracted from HTTP headers (`Remote-User`, `Remote-Groups`, `Remote-Email`, `Remote-Name`)
+* Configurable group-to-role mapping via `DAGSTER_AUTH_PROXY_GROUP_PATTERN`
+* Logout endpoint now redirects to external provider logout URL in proxy mode
+* Smart group header parser handles JSON arrays, LDAP DNs, CSV, and mixed delimiters
+
+**Kubernetes Deployment (Examples)**
+* Complete Minikube example with full SSO stack:
+  * OpenLDAP with pre-seeded users and RBAC groups
+  * Authelia configured with LDAP backend
+  * Caddy as reverse proxy with TLS termination and forward auth
+  * Dagster-AuthKit in proxy mode
+* Comprehensive Makefile with build, deploy, connect, and monitoring targets
+* Critical Kubernetes fixes documented:
+  * `enableServiceLinks: false` to prevent deprecated env vars
+  * Separate `/data` volume with `emptyDir` for writable storage
+  * LoadBalancer service for proper HTTPS exposure
+  * Sequential LDIF imports via ConfigMap with numbered files
+
+**Authelia + Caddy Example (Docker)**
+* Complete SSO integration with Authelia, Caddy, and OpenLDAP
+* Caddy configured with `forward_auth` and header injection
+* Test users with password123 mapped to RBAC roles (admin, editor, launcher, viewer)
+* Optional `users_database.yml` for testing without LDAP
+
+### ✨ Enhancements
+
+**GraphQL Analysis**
+* Replaced fragile regex parser with official `graphql-core` AST parser
+* Added `GraphQLMutationAnalyzer` for accurate mutation detection
+* Handles aliases, multiple mutations, and complex queries properly
+* Added `list-permissions` CLI command to display RBAC matrix
+
+**Redis Operations**
+* Atomic `expire` with `nx=True` in rate limiter (sets TTL only on first increment)
+* Fixed session revocation: properly clean user token sets before deletion
+* Added Redis URL format validation in config
+
+**Code Organization**
+* Centralized all UI templates (HTML/CSS/JS) in `utils/templates.py`
+* Removed 600+ lines of inline strings from routes and patch modules
+* Cleaner separation between logic and presentation
+
+**Observability**
+* Added RBAC decision tracking via `track_rbac_decision()`
+* Metrics now count allowed/denied mutations per role and action
+* Better error logging with query truncation for debugging
+
+### 📚 Documentation & Examples
+
+* New `examples/authelia/` - Complete Authelia + Caddy + LDAP stack
+* New `examples/kubernetes/` - Same stack running on Minikube
+* Updated `examples/ldap/` with better OpenLDAP configuration
+* Added `list-permissions` to CLI documentation
+* Clearer backend matrix with proxy mode status
+
+### 🐛 Bug Fixes
+
+* **GraphQL:** Replaced generic `unknown_mutation` with explicit `__UNPARSEABLE_QUERY__` sentinel
+* **Middleware:** Fixed incorrect header extraction in proxy mode
+* **Session:** Redis session revocation now properly removes user token mappings
+* **Rate Limiter:** TTL now set correctly only on first attempt
+
+### 🔧 Configuration Changes
+
+**New Environment Variables:**
+```bash
+# Proxy Mode
+DAGSTER_AUTH_PROXY_USER_HEADER       # Header for username (default: Remote-User)
+DAGSTER_AUTH_PROXY_GROUPS_HEADER     # Header for groups (default: Remote-Groups)
+DAGSTER_AUTH_PROXY_EMAIL_HEADER      # Header for email (default: Remote-Email)
+DAGSTER_AUTH_PROXY_NAME_HEADER       # Header for display name (default: Remote-Name)
+DAGSTER_AUTH_PROXY_GROUP_PATTERN     # Pattern for LDAP group mapping
+DAGSTER_AUTH_PROXY_LOGOUT_URL        # External logout URL for proxy mode
+```
+
+### ⚠️ Breaking Changes
+
+* **GraphQL Error Format:** Unparseable queries now return `__UNPARSEABLE_QUERY__` instead of generic fallback
+* **Redis Session Format:** Session data structure updated; existing Redis sessions will be invalidated on upgrade
+
+---
+
 ## [0.2.0] - 2026-01-28
 
 ### 🚀 Major Changes

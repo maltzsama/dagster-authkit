@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authelia
+  namespace: authkit-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authelia
+  template:
+    metadata:
+      labels:
+        app: authelia
+    spec:
+      enableServiceLinks: false # <--- O FIX DO ERRO DE DEPRECATION
+      containers:
+      - name: authelia
+        image: authelia/authelia:4.38
+        ports:
+        - containerPort: 9091
+        env: []
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: data
+          mountPath: /data # <--- O FIX DO READ-ONLY FILE SYSTEM
+      volumes:
+      - name: config
+        configMap:
+          name: authelia-config
+      - name: data
+        emptyDir: {}
