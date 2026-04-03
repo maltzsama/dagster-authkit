@@ -203,7 +203,7 @@ class PeeweeAuthBackend(AuthBackend):
 
     def _bootstrap_admin(self):
         """Auto-creates admin user if specified in configuration."""
-        admin_pass = self.config.get("DAGSTER_AUTH_ADMIN_PASSWORD")
+        admin_pass = self.config.get("ADMIN_PASSWORD")
         if admin_pass and not self.get_user("admin"):
             self.add_user(
                 username="admin",

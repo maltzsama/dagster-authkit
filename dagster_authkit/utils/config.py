@@ -15,7 +15,7 @@ class AuthConfig:
         self.ENV = os.getenv("DAGSTER_AUTH_ENV", "production")
 
         # Session settings
-        self.SECRET_KEY = os.getenv("DAGSTER_AUTH_SECRET_KEY", self._generate_secret_key())
+        self.SECRET_KEY = os.getenv("DAGSTER_AUTH_SECRET_KEY") or self._generate_secret_key()
         self.SESSION_COOKIE_NAME = os.getenv("DAGSTER_AUTH_COOKIE_NAME", "dagster_session")
         self.SESSION_MAX_AGE = int(os.getenv("DAGSTER_AUTH_SESSION_MAX_AGE", "86400"))  # 24h
         self.SESSION_COOKIE_SECURE = (
