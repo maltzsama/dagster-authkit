@@ -76,10 +76,17 @@ class LDAPAuthBackend(AuthBackend):
 
             tls_config = None
             if self.use_tls:
-                tls_config = Tls(
-                    validate=ssl.CERT_REQUIRED if self.ca_cert else ssl.CERT_NONE,
-                    ca_certs_file=self.ca_cert,
-                )
+                if self.ca_cert:
+                    tls_config = Tls(
+                        validate=ssl.CERT_REQUIRED,
+                        ca_certs_file=self.ca_cert,
+                    )
+                else:
+                    tls_config = Tls(validate=ssl.CERT_NONE)
+                    logger.warning(
+                        "LDAP TLS enabled without CA cert — connection is vulnerable to MITM. "
+                        "Set DAGSTER_AUTH_LDAP_CA_CERT in production."
+                    )
 
             self.server = Server(
                 self.server_uri,
@@ -276,11 +283,10 @@ class LDAPAuthBackend(AuthBackend):
                 attrs = response[0].get("attributes", {})
 
                 # DEBUG: Show LDAP attributes
-                logger.info(f"🔍 LDAP Attributes for {user_dn}:")
-                logger.info(f"  Raw attrs: {attrs}")
-                logger.info(f"  displayName: {attrs.get('displayName')}")
-                logger.info(f"  cn: {attrs.get('cn')}")
-                logger.info(f"  mail: {attrs.get('mail')}")
+                logger.debug(f"LDAP attributes fetched for {user_dn}: "
+                            f"displayName={attrs.get('displayName')}, "
+                            f"cn={attrs.get('cn')}, "
+                            f"mail={attrs.get('mail')}")
 
                 return attrs
 
@@ -299,7 +305,7 @@ class LDAPAuthBackend(AuthBackend):
         # 2. If member_of is empty, perform a Reverse Group Search (The OpenLDAP fix)
         if not member_of and conn:
             logger.debug(f"LDAP: memberOf empty for {user_dn}. Performing manual group search.")
-            member_of = self._get_user_groups_manually(user_dn, conn)
+            member_of = self._get_user_groups_manually(user_dn)
 
         # 3. Check group mappings (Case-insensitive)
         if member_of and self.group_mappings:
@@ -329,7 +335,7 @@ class LDAPAuthBackend(AuthBackend):
         domain_parts = [p.strip() for p in parts if p.strip().lower().startswith("dc=")]
         return ",".join(domain_parts)
 
-    def _get_user_groups_manually(self, user_dn: str, conn=None) -> List[str]:
+    def _get_user_groups_manually(self, user_dn: str) -> List[str]:
         """
         Reverse search: Find groups that have this user DN as a member.
         Works for OpenLDAP which doesn't auto-populate memberOf.
@@ -339,7 +345,6 @@ class LDAPAuthBackend(AuthBackend):
         try:
             from ldap3 import Connection, SAFE_SYNC, SUBTREE
 
-            # ✅ FIX: Create ADMIN connection (users can't search)
             admin_conn = Connection(
                 self.server,
                 user=self.bind_dn,
@@ -348,35 +353,34 @@ class LDAPAuthBackend(AuthBackend):
                 auto_bind=True,
             )
 
-            # Search from domain base to find groups in ou=groups
-            domain_base = self._get_domain_base_dn()
+            try:
+                domain_base = self._get_domain_base_dn()
+                search_filter = f"(|(member={user_dn})(uniqueMember={user_dn}))"
 
-            search_filter = f"(|(member={user_dn})(uniqueMember={user_dn}))"
+                logger.info(f"LDAP: Manual group search:")
+                logger.info(f"  base_dn: {domain_base}")
+                logger.info(f"  filter: {search_filter}")
+                logger.info(f"  user_dn: {user_dn}")
 
-            logger.info(f"LDAP: Manual group search:")
-            logger.info(f"  base_dn: {domain_base}")
-            logger.info(f"  filter: {search_filter}")
-            logger.info(f"  user_dn: {user_dn}")
+                status, _, response, _ = admin_conn.search(
+                    search_base=domain_base,
+                    search_filter=search_filter,
+                    search_scope=SUBTREE,
+                    attributes=["cn"],
+                )
 
-            status, _, response, _ = admin_conn.search(
-                search_base=domain_base,
-                search_filter=search_filter,
-                search_scope=SUBTREE,
-                attributes=["cn"],
-            )
+                logger.info(f"LDAP: Search status: {status}")
+                logger.info(f"LDAP: Search response: {response}")
 
-            admin_conn.unbind()  # ✅ Cleanup
+                if status and response:
+                    groups = [entry["dn"].lower() for entry in response]
+                    logger.info(f"LDAP: Found {len(groups)} groups for {user_dn}: {groups}")
+                    return groups
 
-            logger.info(f"LDAP: Search status: {status}")
-            logger.info(f"LDAP: Search response: {response}")
-
-            if status and response:
-                groups = [entry["dn"].lower() for entry in response]
-                logger.info(f"LDAP: Found {len(groups)} groups for {user_dn}: {groups}")
-                return groups
-
-            logger.warning(f"LDAP: No groups found for {user_dn}")
-            return []
+                logger.warning(f"LDAP: No groups found for {user_dn}")
+                return []
+            finally:
+                admin_conn.unbind()
         except Exception as e:
             logger.error(f"LDAP: Manual group search failed: {e}", exc_info=True)
             return []
