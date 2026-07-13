@@ -1,12 +1,8 @@
 # 🛡️ Dagster AuthKit
 
-<div align="center">
-
 **Community authentication wrapper for self-hosted Dagster OSS.**
 
 *Authentication, RBAC, and Audit logs for Dagster without touching internal code.*
-
-</div>
 
 ---
 
@@ -215,6 +211,7 @@ dagster-authkit list-permissions
 ## 🔮 Roadmap
 
 ### Current (v0.4.0)
+
 * ✅ Username/password auth (bcrypt)
 * ✅ 4-level RBAC (ADMIN/EDITOR/LAUNCHER/VIEWER)
 * ✅ SQLite, PostgreSQL, MySQL, Redis support
@@ -231,10 +228,12 @@ dagster-authkit list-permissions
 * ✅ Proxy trusted IP allowlist
 
 ### Next
+
 * 🔄 Helm chart for Kubernetes deployments
 * 🔄 OIDC backend (beyond proxy mode)
 
 **What we will NOT do:**
+
 * ❌ Inject React code into Dagster UI (too brittle)
 * ❌ Complex enterprise features (that's what Dagster+ is for)
 
@@ -246,6 +245,7 @@ Found a bug? Want to add a feature?
 Open a PR. If it works and keeps things simple, we'll merge it.
 
 **Especially needed:**
+
 - People with Active Directory experience to validate the LDAP backend
 - Testing on different Dagster versions
 - Helm chart contributions

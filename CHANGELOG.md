@@ -9,27 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - 2026-07-13
 
-### 🚀 Major Changes
+### Major Changes
 
 **Cross-Pod Session Revocation (DB-backed)**
+
 * Added `session_version` column to `users` table — bumps on `change_password`, `change_role`, `delete_user`
 * `CookieBackend` now reads version from DB (with 10s TTL cache) for multi-pod safe revocation without Redis
 * Automatic migration on first boot for existing databases
 * Non-SQL backends get a `WARNING` about single-pod limitation
 
 **Pure ASGI Middleware**
+
 * Rewrote `DagsterAuthMiddleware` from `BaseHTTPMiddleware` to pure ASGI
 * WebSocket connections (GraphQL subscriptions at `/graphql`) now authenticated via session cookie
 * Unauthenticated WS connections closed with code 4001
 * CORS preflight (`OPTIONS`) passes through before auth check
 
 **RBAC: Deny-by-Default**
+
 * Unknown GraphQL mutations now require `ADMIN` by default (was: open to `VIEWER`)
 * Configurable via `DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE`
 * `operationName` support — multi-operation documents only check the named operation
 * REST write minimum role configurable via `DAGSTER_AUTH_REST_WRITE_ROLE`
 
-### 🔐 Security Hardening
+### Security Hardening
 
 * **CSRF protection** — Signed double-submit cookie on login form (stateless, works multi-pod)
 * **XSS prevention** — `html.escape()` on all user-controlled values in login and 403 pages
@@ -40,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Username sanitization** — Applied in SQL `add_user` (was only in web route)
 * **Metrics hardening** — Removed `username` from metric labels (prevented info leak via `/metrics`)
 
-### 🏗️ Core Improvements
+### Core Improvements
 
 * **Patch resilience** — Async/sync detection via `iscoroutinefunction`, `try/except` fallback to vanilla Dagster, idempotency guard
 * **Backend instance caching** — Backend connections reused across requests (prevents connection pool exhaustion)
@@ -51,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **OAuth stub** — `OAuthBackend` class implemented (was empty file causing import errors)
 * **Blocking I/O** — `backend.authenticate()` runs via `run_in_threadpool` to avoid event loop starvation
 
-### 🐛 Bug Fixes
+### Bug Fixes
 
 * `change_role` now revokes sessions (was missing `revoke_all` call)
 * Audit JSON now reflects actual method/path for REST denials (was hardcoded `POST /graphql`)
@@ -64,14 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `datetime.utcnow()` replaced with `datetime.now(timezone.utc)`
 * `InMemoryRateLimiter` prunes empty entries to prevent memory leak
 
-### 📚 Testing
+### Testing
 
 * 258 unit + integration tests across 14 test files
 * Multi-pod integration tests (session + CSRF portability)
 * `operationName` and fragment traversal tests for GraphQL analyzer
 * Security regression tests (empty password, XSS escape, open redirect, RBAC default-deny)
 
-### 🔧 Configuration Changes
+### Configuration Changes
 
 **New Environment Variables:**
 ```bash
@@ -81,7 +84,7 @@ DAGSTER_AUTH_PROXY_TRUSTED_IPS       # Comma-separated proxy IPs (REQUIRED in pr
 DAGSTER_AUTH_PROXY_TRUST_ALL         # Opt-in to proxy mode without IP allowlist (default: false)
 ```
 
-### ⚠️ Breaking Changes
+### Breaking Changes
 
 * **`SECRET_KEY` is now required in production.** Server refuses to start without it.
 * **Proxy mode requires `DAGSTER_AUTH_PROXY_TRUSTED_IPS`** or explicit `TRUST_ALL=true`.
@@ -92,16 +95,12 @@ DAGSTER_AUTH_PROXY_TRUST_ALL         # Opt-in to proxy mode without IP allowlist
 
 ---
 
-## [Unreleased]
+## [0.3.0] - 2026-02-14
 
-### Planned Features
-- Helm chart for Kubernetes deployments
-- OIDC backend (native, beyond proxy mode)
-- Fine-grained asset-level RBAC
-
-### 🚀 Major Changes
+### Major Changes
 
 **Proxy Authentication Mode (Stable)**
+
 * Added `ProxyAuthBackend` for delegating authentication to external reverse proxies (Authelia, Traefik, Caddy, oauth2-proxy)
 * User identity extracted from HTTP headers (`Remote-User`, `Remote-Groups`, `Remote-Email`, `Remote-Name`)
 * Configurable group-to-role mapping via `DAGSTER_AUTH_PROXY_GROUP_PATTERN`
@@ -109,6 +108,7 @@ DAGSTER_AUTH_PROXY_TRUST_ALL         # Opt-in to proxy mode without IP allowlist
 * Smart group header parser handles JSON arrays, LDAP DNs, CSV, and mixed delimiters
 
 **Kubernetes Deployment (Examples)**
+
 * Complete Minikube example with full SSO stack:
   * OpenLDAP with pre-seeded users and RBAC groups
   * Authelia configured with LDAP backend
@@ -122,35 +122,40 @@ DAGSTER_AUTH_PROXY_TRUST_ALL         # Opt-in to proxy mode without IP allowlist
   * Sequential LDIF imports via ConfigMap with numbered files
 
 **Authelia + Caddy Example (Docker)**
+
 * Complete SSO integration with Authelia, Caddy, and OpenLDAP
 * Caddy configured with `forward_auth` and header injection
 * Test users with password123 mapped to RBAC roles (admin, editor, launcher, viewer)
 * Optional `users_database.yml` for testing without LDAP
 
-### ✨ Enhancements
+### Enhancements
 
 **GraphQL Analysis**
+
 * Replaced fragile regex parser with official `graphql-core` AST parser
 * Added `GraphQLMutationAnalyzer` for accurate mutation detection
 * Handles aliases, multiple mutations, and complex queries properly
 * Added `list-permissions` CLI command to display RBAC matrix
 
 **Redis Operations**
+
 * Atomic `expire` with `nx=True` in rate limiter (sets TTL only on first increment)
 * Fixed session revocation: properly clean user token sets before deletion
 * Added Redis URL format validation in config
 
 **Code Organization**
+
 * Centralized all UI templates (HTML/CSS/JS) in `utils/templates.py`
 * Removed 600+ lines of inline strings from routes and patch modules
 * Cleaner separation between logic and presentation
 
 **Observability**
+
 * Added RBAC decision tracking via `track_rbac_decision()`
 * Metrics now count allowed/denied mutations per role and action
 * Better error logging with query truncation for debugging
 
-### 📚 Documentation & Examples
+### Documentation & Examples
 
 * New `examples/authelia/` - Complete Authelia + Caddy + LDAP stack
 * New `examples/kubernetes/` - Same stack running on Minikube
@@ -158,14 +163,14 @@ DAGSTER_AUTH_PROXY_TRUST_ALL         # Opt-in to proxy mode without IP allowlist
 * Added `list-permissions` to CLI documentation
 * Clearer backend matrix with proxy mode status
 
-### 🐛 Bug Fixes
+### Bug Fixes
 
 * **GraphQL:** Replaced generic `unknown_mutation` with explicit `__UNPARSEABLE_QUERY__` sentinel
 * **Middleware:** Fixed incorrect header extraction in proxy mode
 * **Session:** Redis session revocation now properly removes user token mappings
 * **Rate Limiter:** TTL now set correctly only on first attempt
 
-### 🔧 Configuration Changes
+### Configuration Changes
 
 **New Environment Variables:**
 ```bash
@@ -178,7 +183,7 @@ DAGSTER_AUTH_PROXY_GROUP_PATTERN     # Pattern for LDAP group mapping
 DAGSTER_AUTH_PROXY_LOGOUT_URL        # External logout URL for proxy mode
 ```
 
-### ⚠️ Breaking Changes
+### Breaking Changes
 
 * **GraphQL Error Format:** Unparseable queries now return `__UNPARSEABLE_QUERY__` instead of generic fallback
 * **Redis Session Format:** Session data structure updated; existing Redis sessions will be invalidated on upgrade
@@ -187,7 +192,7 @@ DAGSTER_AUTH_PROXY_LOGOUT_URL        # External logout URL for proxy mode
 
 ## [0.2.0] - 2026-01-28
 
-### 🚀 Major Changes
+### Major Changes
 
 **Multi-Backend Support (SQL & Redis)**
 
@@ -211,7 +216,7 @@ DAGSTER_AUTH_PROXY_LOGOUT_URL        # External logout URL for proxy mode
 
 
 
-### ✨ Enhancements
+### Enhancements
 
 **Health & Observability**
 
@@ -228,12 +233,12 @@ DAGSTER_AUTH_PROXY_LOGOUT_URL        # External logout URL for proxy mode
 
 * Added `Makefile` in example directories for easy startup (`make up`).
 
-### 🐛 Bug Fixes
+### Bug Fixes
 
 * **Middleware Dispatch:** Fixed a critical bug where `call_next` was invoked for internal endpoints (`/auth/health`), causing Dagster to return 404.
 * **Dependency Management:** Clarified optional dependencies in `pyproject.toml` (install via `[postgresql]`, `[redis]`, etc).
 
-### ⚠️ Breaking Changes
+### Breaking Changes
 
 * **Project Status:** Downgraded status label from "General Availability" to **BETA**. Use in production at your own risk.
 * **RBAC Logic:** Existing users in database might need role migration if custom roles were manually hacked (standard roles map automatically).
@@ -242,13 +247,14 @@ DAGSTER_AUTH_PROXY_LOGOUT_URL        # External logout URL for proxy mode
 
 ## [0.1.0] - 2026-01-25
 
-### 🎉 Initial Release
+### Initial Release
 
 First working version of dagster-authkit - community authentication for Dagster OSS.
 
-### ✨ Features
+### Features
 
 **Authentication System**
+
 - SQLite-based authentication backend with bcrypt password hashing
 - Login/logout pages with clean UI
 - Session management using cryptographically signed cookies (itsdangerous)
@@ -256,12 +262,14 @@ First working version of dagster-authkit - community authentication for Dagster 
 - Automatic session expiration (24h default, configurable)
 
 **Role-Based Access Control (RBAC)**
+
 - Three roles: admin, editor, viewer
 - GraphQL mutation detection and blocking for non-editors
 - Proper error responses that stop UI loading states
 - Viewer role can see everything but cannot modify (read-only)
 
 **User Management CLI**
+
 - `dagster-authkit init-db` - Initialize database with optional admin user
 - `dagster-authkit add-user` - Add users with roles
 - `dagster-authkit list-users` - List all users
@@ -269,11 +277,13 @@ First working version of dagster-authkit - community authentication for Dagster 
 - `dagster-authkit delete-user` - Soft-delete users
 
 **Audit Logging**
+
 - Structured JSON audit logs to stdout
 - Tracks: login attempts, logout, access control decisions, password changes, user management
 - Ready for log aggregation systems (Datadog, Splunk, CloudWatch, ELK)
 
 **Security Features**
+
 - Bcrypt password hashing with SHA-256 pre-hash (prevents BCrypt 72-byte limit issues)
 - Constant-time password comparison (timing attack prevention)
 - Security headers: X-Frame-Options, CSP, X-Content-Type-Options
@@ -282,25 +292,29 @@ First working version of dagster-authkit - community authentication for Dagster 
 - CSRF token generation (foundation for future CSRF protection)
 
 **Monkey-Patching System**
+
 - Dagster API compatibility detection layer
 - Non-invasive middleware injection (first layer in ASGI stack)
 - Route injection for /auth/* endpoints
 - UI injection - user menu in Dagster sidebar with username, role, and logout
 
 **Health & Monitoring**
+
 - `/auth/health` - Unified health check endpoint
 - `/auth/health?type=live` - Kubernetes liveness probe
 - `/auth/health?type=ready` - Kubernetes readiness probe
 - `/auth/metrics` - Basic metrics (login attempts, uptime, etc.)
 
 **Docker/Kubernetes Support**
+
 - Admin user bootstrap via environment variables
 - `DAGSTER_AUTH_ADMIN_USER`, `DAGSTER_AUTH_ADMIN_PASSWORD` for IaC deployments
 - Automatic database initialization on first run
 
-### 🏗️ Architecture
+### Architecture
 
 **Modular Structure**
+
 - `dagster_authkit/core/` - Core patching and middleware
 - `dagster_authkit/auth/` - Authentication backends and security
 - `dagster_authkit/api/` - Routes and health checks
@@ -308,13 +322,15 @@ First working version of dagster-authkit - community authentication for Dagster 
 - `dagster_authkit/utils/` - Config, audit, logging
 
 **Plugin System**
+
 - Backend discovery via setuptools entry points
 - Easy to add custom backends without modifying core code
 - Dummy backend for development (admin/admin, editor/editor, viewer/viewer)
 
-### 📦 Dependencies
+### Dependencies
 
 **Core**
+
 - `dagster>=1.10.0,<2.0.0`
 - `dagster-webserver>=1.10.0,<2.0.0`
 - `starlette>=0.27.0`
@@ -322,9 +338,10 @@ First working version of dagster-authkit - community authentication for Dagster 
 - `python-multipart>=0.0.6`
 
 **Optional**
+
 - `bcrypt>=4.0.0` - For SQLite backend
 
-### 🐛 Known Issues
+### Known Issues
 
 - **Monkey-patching fragility** - May break across Dagster versions (tested on 1.10-1.12)
 - **In-memory rate limiting** - Does not work across multiple instances (use Redis for distributed)
@@ -333,22 +350,23 @@ First working version of dagster-authkit - community authentication for Dagster 
 - **LDAP backend** - Stub only, not implemented
 - **OAuth backend** - Stub only, not implemented
 
-### 📝 Documentation
+### Documentation
 
 - README.md with quick start guide
 - Inline code documentation (docstrings)
 - CLI help messages (`dagster-authkit --help`)
 
-### 🔧 Configuration
+### Configuration
 
 All configuration via environment variables:
+
 - Session management (SECRET_KEY, SESSION_MAX_AGE, cookie settings)
 - Backend selection (AUTH_BACKEND)
 - Rate limiting (RATE_LIMIT_*, configurable attempts/window)
 - Audit logging (AUDIT_LOG_ENABLED)
 - Admin bootstrap (ADMIN_USER, ADMIN_PASSWORD)
 
-### ⚠️ Breaking Changes
+### Breaking Changes
 
 N/A - Initial release
 
@@ -357,8 +375,7 @@ N/A - Initial release
 ## [Unreleased]
 
 ### Planned Features
-- LDAP/Active Directory backend implementation
-- OAuth 2.0 backend implementation (Google, Azure AD, Okta)
-- Multi-instance support (Redis-based rate limiting and sessions)
 
----
+- Helm chart for Kubernetes deployments
+- OIDC backend (native, beyond proxy mode)
+- Fine-grained asset-level RBAC
