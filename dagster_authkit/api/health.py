@@ -24,9 +24,21 @@ class MetricsCollector:
     Simple in-memory metrics collector.
 
     For distributed production, replace with Prometheus/StatsD.
+
+    Tracks:
+    - Counters (with optional labels)
+    - Gauges
+    - Histograms (capped at 1000 observations per label combination)
+
+    Usage::
+
+        collector = MetricsCollector()
+        collector.increment_counter("requests", {"status": "200"})
+        metrics = collector.get_metrics()
     """
 
     def __init__(self):
+        """Initialise empty counters, gauges, histograms, and capture start time."""
         self._lock = threading.Lock()
         self._counters = defaultdict(int)
         self._gauges = defaultdict(float)
@@ -125,6 +137,18 @@ def track_rbac_decision(allowed: bool, role: str, action: str):
     )
 
 
+def _check_db_connection(backend) -> bool:
+    """Execute a lightweight query to verify the database is reachable."""
+    if not hasattr(backend, "db") or backend.db is None:
+        return False
+    try:
+        backend.db.execute_sql("SELECT 1")
+        return True
+    except Exception as e:
+        logger.error(f"Health check DB ping failed: {e}")
+        return False
+
+
 def get_health_status() -> Dict[str, Any]:
     """
     Returns system health status.
@@ -136,29 +160,29 @@ def get_health_status() -> Dict[str, Any]:
     health = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "0.3.0",
+        "version": "0.4.0",
         "backend": config.AUTH_BACKEND,
         "checks": {},
     }
 
-    # Check 1: Backend accessibility
     try:
-
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
         health["checks"]["backend"] = {"status": "ok", "name": backend.get_name()}
-    except Exception as e:
-        health["status"] = "degraded"
-        health["checks"]["backend"] = {"status": "error", "error": str(e)}
 
-    # Check 2: Database (SQL backends)
-    if config.AUTH_BACKEND in ("sql", "sqlite"):
-        try:
-            # Use the cached backend instance rather than opening a raw connection
-            backend = get_backend(config.AUTH_BACKEND, config.__dict__)
-            health["checks"]["database"] = {"status": "ok", "engine": type(backend.db).__name__}
-        except Exception as e:
-            health["status"] = "unhealthy"
-            health["checks"]["database"] = {"status": "error", "error": str(e)}
+        # Check 2: Database (SQL backends)
+        if config.AUTH_BACKEND in ("sql", "sqlite"):
+            if _check_db_connection(backend):
+                health["checks"]["database"] = {
+                    "status": "ok",
+                    "engine": type(backend.db).__name__,
+                }
+            else:
+                health["status"] = "unhealthy"
+                health["checks"]["database"] = {"status": "error", "error": "Database ping failed"}
+
+    except Exception as e:
+        health["status"] = "unhealthy"
+        health["checks"]["backend"] = {"status": "error", "error": str(e)}
 
     # Check 3: Metrics
     metrics = _metrics.get_metrics()
@@ -176,15 +200,19 @@ async def health_endpoint(request):
     """
     Unified health check endpoint.
 
-    Serves for:
-    - Load balancers (HTTP 200 = healthy)
-    - Kubernetes liveness probe
-    - Kubernetes readiness probe
+    Serves as:
+    - Load balancer health check (HTTP 200 = healthy)
+    - Kubernetes liveness probe (``?type=live``)
+    - Kubernetes readiness probe (``?type=ready``, tests DB connectivity)
+    - Full health check (default, includes backend + DB status + metrics)
 
     Query params:
-    - ?type=live: Liveness check (always returns 200 if process alive)
-    - ?type=ready: Readiness check (checks backend)
-    - (default): Full health check with details
+        ``type=live``  — Liveness: always returns 200 if the process is alive.
+        ``type=ready`` — Readiness: tests backend and database connectivity.
+        (default)      — Full health check with details and metrics summary.
+
+    Returns:
+        ``JSONResponse`` with appropriate status code (200 or 503).
     """
     check_type = request.query_params.get("type", "full")
 
@@ -195,8 +223,12 @@ async def health_endpoint(request):
     elif check_type == "ready":
         # Readiness: Can serve traffic?
         try:
-
             backend = get_backend(config.AUTH_BACKEND, config.__dict__)
+            if config.AUTH_BACKEND in ("sql", "sqlite"):
+                if not _check_db_connection(backend):
+                    return JSONResponse(
+                        {"ready": False, "error": "Database unreachable"}, status_code=503
+                    )
             return JSONResponse({"ready": True}, status_code=200)
         except Exception as e:
             return JSONResponse({"ready": False, "error": str(e)}, status_code=503)
@@ -204,25 +236,26 @@ async def health_endpoint(request):
     else:
         # Full health check
         health = get_health_status()
-
-        status_code = 200
-        if health["status"] == "degraded":
-            status_code = 200  # Still serving traffic
-        elif health["status"] == "unhealthy":
-            status_code = 503  # Service unavailable
-
+        status_code = 200 if health["status"] != "unhealthy" else 503
         return JSONResponse(health, status_code=status_code)
 
 
 async def metrics_endpoint(request):
     """
-    Metrics endpoint (optional - for observability).
+    Metrics endpoint for observability.
 
-    Returns basic metrics in JSON:
-    - Counters (login attempts, etc.)
+    Returns basic in-memory metrics as JSON:
+    - Counters (login attempts, RBAC decisions)
     - Gauges
-    - Histograms
-    - Uptime
+    - Histograms (request duration with min/max/avg)
+    - Uptime in seconds
+
+    Note:
+        In production, restrict access to this endpoint via IP allowlist
+        or admin token. For distributed deployments, replace with Prometheus/StatsD.
+
+    Returns:
+        ``JSONResponse`` with all collected metrics.
     """
     metrics = _metrics.get_metrics()
     return JSONResponse(metrics)

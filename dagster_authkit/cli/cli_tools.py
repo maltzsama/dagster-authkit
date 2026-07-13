@@ -54,7 +54,16 @@ def handle_user_management():
 
 
 def init_db_command(args):
-    """Initialize a new database and create necessary tables."""
+    """
+    Initialise a new database and create necessary tables.
+
+    Args:
+        args: ``argparse.Namespace`` with optional ``db_path`` and
+              ``with_admin`` flag.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
     backend = _get_backend(args.db_path)
 
     # Force table creation
@@ -79,7 +88,17 @@ def init_db_command(args):
 
 
 def add_user_command(args):
-    """Add a new user to the SQL database."""
+    """
+    Add a new user to the SQL database.
+
+    Args:
+        args: ``argparse.Namespace`` with ``username`` and optional
+              ``password``, ``email``, ``full_name``, ``db_path``,
+              and role flags (``--admin``, ``--editor``, ``--launcher``).
+
+    Returns:
+        0 on success, 1 on failure (user may already exist).
+    """
     backend = _get_backend(args.db_path)
 
     password = args.password or getpass.getpass("Password: ")
@@ -119,7 +138,16 @@ def add_user_command(args):
 
 
 def change_password_command(args):
-    """Update user password via CLI."""
+    """
+    Update a user's password and revoke all their active sessions.
+
+    Args:
+        args: ``argparse.Namespace`` with ``username`` and optional
+              ``password``, ``db_path``.
+
+    Returns:
+        0 on success, 1 if user not found.
+    """
     backend = _get_backend(args.db_path)
 
     new_password = args.password or getpass.getpass("New password: ")
@@ -134,7 +162,15 @@ def change_password_command(args):
 
 
 def list_users_command(args):
-    """List all registered users from the SQL database."""
+    """
+    List all registered users from the SQL database.
+
+    Args:
+        args: ``argparse.Namespace`` with optional ``db_path``.
+
+    Returns:
+        0 always (lists users or prints "No users found").
+    """
     _get_backend(args.db_path)  # Just to ensure connection
 
     users = UserTable.select()
@@ -160,7 +196,16 @@ def list_users_command(args):
 
 
 def delete_user_command(args):
-    """Deactivate a user (soft delete)."""
+    """
+    Deactivate a user (soft delete) — sets ``is_active=False``.
+
+    Args:
+        args: ``argparse.Namespace`` with ``username`` and optional
+              ``--yes`` flag to skip confirmation, ``db_path``.
+
+    Returns:
+        0 on success (or cancellation), 1 if user not found.
+    """
     backend = _get_backend(args.db_path)
 
     if not args.yes:
@@ -178,7 +223,15 @@ def delete_user_command(args):
 
 
 def list_permissions_command(args):
-    """List RBAC permissions for each role."""
+    """
+    Display the full RBAC permissions matrix for all roles.
+
+    Args:
+        args: Unused (for CLI dispatch consistency).
+
+    Returns:
+        0 always.
+    """
     from dagster_authkit.auth.backends.base import RolePermissions
 
     print("\n" + "=" * 60)

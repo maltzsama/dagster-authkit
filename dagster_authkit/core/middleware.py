@@ -56,6 +56,12 @@ class DagsterAuthMiddleware:
     WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
     def __init__(self, app: ASGIApp):
+        """
+        Initialise the authentication middleware.
+
+        Args:
+            app: Inner ASGI application (the Dagster webserver).
+        """
         self.app = app
 
         self.is_proxy_mode = config.AUTH_BACKEND == "proxy"
@@ -79,6 +85,15 @@ class DagsterAuthMiddleware:
     # ================================================================
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """
+        ASGI entry point. Routes HTTP and WebSocket connections to the
+        appropriate handler.
+
+        Args:
+            scope:   ASGI connection scope.
+            receive: ASGI receive callable.
+            send:    ASGI send callable.
+        """
         if scope["type"] == "websocket":
             await self._handle_websocket(scope, receive, send)
         elif scope["type"] == "http":

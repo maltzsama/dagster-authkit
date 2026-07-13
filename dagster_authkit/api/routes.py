@@ -85,7 +85,24 @@ async def login_page(request: Request) -> Response:
 
 
 async def process_login(request: Request) -> Response:
-    """POST /auth/process - Authenticates and creates session."""
+    """
+    POST /auth/process — Authenticates and creates session.
+
+    Multi-step flow:
+    1. Validate CSRF token (stateless signed, 1h TTL).
+    2. Check rate limits for both username and IP independently.
+    3. Authenticate via the configured backend (runs in thread pool).
+    4. On success: create session, set cookie, redirect to next_url.
+    5. On failure: record attempt, redirect with error.
+
+    Args:
+        request: Starlette Request with form fields (username, password,
+                 next, csrf_token).
+
+    Returns:
+        RedirectResponse (302) to either next_url on success or
+        /auth/login with error message on failure.
+    """
     form = await request.form()
     username = SecurityHardening.sanitize_username(str(form.get("username", "")).strip())
     password = str(form.get("password", ""))

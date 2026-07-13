@@ -31,7 +31,23 @@ MANAGEMENT_COMMANDS = [
 
 def main():
     """
-    Orchestrates the startup sequence.
+    Primary entry point for ``dagster-authkit``.
+
+    Orchestrates the full startup sequence:
+
+    1. Initialise structured logging.
+    2. Intercept management commands (add-user, list-users, etc.) and
+       delegate to ``cli_tools.handle_user_management()``.
+    3. Print startup banner and configuration summary.
+    4. Verify Dagster API compatibility (exits on failure).
+    5. Apply monkey-patches to DagsterWebserver (middleware, routes, UI).
+       Verify patches were applied successfully.
+    6. Bootstrap the SQL backend if configured (create tables, admin user).
+    7. Delegate normal webserver invocation to Dagster's own CLI
+       (``dagster_webserver.cli.main`` or legacy ``dagit.cli.main``).
+    8. Trap ``SystemExit`` for user-friendly error messages on missing args.
+
+    This function calls ``sys.exit()``; it does not return normally.
     """
     # 1. Initialize global logging
     logger = setup_logging()
