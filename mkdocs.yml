@@ -1,0 +1,71 @@
+site_name: Dagster AuthKit
+site_description: Community authentication wrapper for self-hosted Dagster OSS
+repo_url: https://github.com/maltzsama/dagster-authkit
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Changelog: CHANGELOG.md
+  - API Reference:
+      - Package: api/dagster_authkit.md
+      - Config: api/config.md
+      - Auth:
+          - Backend Base: api/auth/backends/base.md
+          - SQL Backend: api/auth/backends/sql.md
+          - LDAP Backend: api/auth/backends/ldap.md
+          - Proxy Backend: api/auth/backends/proxy.md
+          - Session: api/auth/session.md
+          - Security: api/auth/security.md
+          - Rate Limiter: api/auth/rate_limiter.md
+      - Core:
+          - Middleware: api/core/middleware.md
+          - Registry: api/core/registry.md
+          - GraphQL Analyzer: api/core/graphql_analyzer.md
+      - API:
+          - Routes: api/api/routes.md
+          - Health: api/api/health.md
+      - CLI: api/cli.md
+      - Utilities:
+          - Audit: api/utils/audit.md
+          - Templates: api/utils/templates.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            show_source: false
+            heading_level: 2
+            docstring_style: google
+            show_root_heading: true
+            show_root_toc_entry: true
+            members_order: source
+            separate_signature: true
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets

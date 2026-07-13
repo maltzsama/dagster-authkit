@@ -64,3 +64,4 @@ Thumbs.db
 tmp/
 *.db
 uv.lock
+site/

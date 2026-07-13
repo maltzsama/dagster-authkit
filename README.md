@@ -25,29 +25,40 @@ Dagster OSS has no auth. If you run it in a VPC or locally, anyone with the URL 
 
 ---
 
-## ✨ What's New in v0.3.0
+## ✨ What's New in v0.4.0
 
-### 🔐 Proxy Authentication Mode
-Delegate authentication to enterprise identity providers via reverse proxy:
-- **Authelia** integration with complete examples
-- **Caddy** reverse proxy with built-in `forward_auth` directive
-- **Traefik** forward auth support
-- Header-based user extraction (`Remote-User`, `Remote-Groups`)
-- Smart group parser that handles JSON, LDAP DNs, CSV, and mixed formats
+### 🔐 Security Hardening (Breaking Changes)
+- **`SECRET_KEY` is now required in production.** The server will refuse to start if `DAGSTER_AUTH_SECRET_KEY` is not set and `DAGSTER_AUTH_ENV=production`. Auto-generated keys caused silent session breakage in multi-pod deployments.
+- **Proxy mode now requires trusted IPs.** Set `DAGSTER_AUTH_PROXY_TRUSTED_IPS` (comma-separated) or explicitly opt into the insecure default with `DAGSTER_AUTH_PROXY_TRUST_ALL=true`.
+- **RBAC is now deny-by-default for unknown mutations.** New GraphQL mutations added by future Dagster releases require `ADMIN` role until explicitly audited. Configure via `DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE`.
 
-### 🚀 Kubernetes Deployment
-Full example stack for Minikube including:
-- OpenLDAP with pre-seeded users and RBAC groups
-- Authelia configured with LDAP backend
-- Caddy as reverse proxy with TLS termination
-- Dagster-AuthKit in proxy mode
-- Step-by-step Makefile with `minikube tunnel` support
+### 🔄 Cross-Pod Session Revocation
+- **DB-backed `session_version` column.** `change_password`, `change_role`, and `delete_user` now invalidate sessions across ALL pods without Redis. A new `session_version` column is automatically added to existing databases on upgrade.
+- **Dual rate-limiting** (username + IP). Prevents both credential stuffing and brute-force on a single account.
+
+### 🛡️ Attack Surface Reduction
+- **CSRF protection** on the login form (double-submit signed cookie).
+- **WebSocket authentication** — GraphQL subscriptions at `/graphql` are now authenticated (pure ASGI middleware).
+- **XSS prevention** in login and 403 pages via HTML escaping.
+- **Open redirect hardening** — protocol-relative URLs (`//evil.com`) are blocked.
+- **Empty password rejection** across all backends (prevents unauthenticated LDAP binds).
 
 ### 🏗️ Core Improvements
-- **GraphQL parsing:** Replaced fragile regex with official AST parser (`graphql-core`)
-- **Redis hardening:** Atomic operations, proper session revocation, URL validation
-- **Code organization:** All UI templates centralized in `utils/templates.py`
-- **Observability:** RBAC decision tracking via metrics endpoint
+- **`operationName` support in GraphQL RBAC.** Clients sending multiple operations in one document no longer trigger false-positive blocks.
+- **Backend instance caching.** Backend connections are reused across requests instead of being recreated per call.
+- **Unified role serialization.** `to_dict()` now uses `role.value` (int) for cross-backend consistency.
+
+---
+
+## ⚠️ Upgrading from v0.3.x
+
+1. **Set `DAGSTER_AUTH_SECRET_KEY`** in your environment. Generate one with:
+   ```bash
+   python -c 'import secrets; print(secrets.token_urlsafe(32))'
+   ```
+2. **If using proxy mode**, set `DAGSTER_AUTH_PROXY_TRUSTED_IPS` to your proxy's IP address.
+3. **Database migration** happens automatically on first boot — no manual steps needed for SQLite/Postgres/MySQL. A `session_version` column is added to the `users` table.
+4. **Role serialization** changed from string (`"ADMIN"`) to int (`40`) in session cookies. Existing sessions continue to work (backward-compatible `from_dict`).
 
 ---
 
@@ -203,21 +214,25 @@ dagster-authkit list-permissions
 
 ## 🔮 Roadmap
 
-### Current (v0.3.0)
+### Current (v0.4.0)
 * ✅ Username/password auth (bcrypt)
 * ✅ 4-level RBAC (ADMIN/EDITOR/LAUNCHER/VIEWER)
 * ✅ SQLite, PostgreSQL, MySQL, Redis support
 * ✅ GraphQL mutation blocking with official AST parser
 * ✅ LDAP backend (experimental)
-* ✅ **Proxy authentication** (Authelia, Caddy, Traefik)
-* ✅ **Kubernetes example** with full SSO stack
+* ✅ Proxy authentication (Authelia, Caddy, Traefik)
+* ✅ Kubernetes example with full SSO stack
 * ✅ Redis session revocation and rate limiting
 * ✅ Centralized UI templates
+* ✅ CSRF protection
+* ✅ Cross-pod session revocation (DB-backed `session_version`)
+* ✅ WebSocket authentication (GraphQL subscriptions)
+* ✅ Dual rate-limiting (username + IP)
+* ✅ Proxy trusted IP allowlist
 
 ### Next
-* 🔄 Improved GraphQL query analysis
 * 🔄 Helm chart for Kubernetes deployments
-* 🔄 OpenID Connect support (via proxy mode)
+* 🔄 OIDC backend (beyond proxy mode)
 
 **What we will NOT do:**
 * ❌ Inject React code into Dagster UI (too brittle)

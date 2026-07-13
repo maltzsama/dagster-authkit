@@ -7,7 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.3.0] - 2026-02-14
+## [0.4.0] - 2026-07-13
+
+### 🚀 Major Changes
+
+**Cross-Pod Session Revocation (DB-backed)**
+* Added `session_version` column to `users` table — bumps on `change_password`, `change_role`, `delete_user`
+* `CookieBackend` now reads version from DB (with 10s TTL cache) for multi-pod safe revocation without Redis
+* Automatic migration on first boot for existing databases
+* Non-SQL backends get a `WARNING` about single-pod limitation
+
+**Pure ASGI Middleware**
+* Rewrote `DagsterAuthMiddleware` from `BaseHTTPMiddleware` to pure ASGI
+* WebSocket connections (GraphQL subscriptions at `/graphql`) now authenticated via session cookie
+* Unauthenticated WS connections closed with code 4001
+* CORS preflight (`OPTIONS`) passes through before auth check
+
+**RBAC: Deny-by-Default**
+* Unknown GraphQL mutations now require `ADMIN` by default (was: open to `VIEWER`)
+* Configurable via `DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE`
+* `operationName` support — multi-operation documents only check the named operation
+* REST write minimum role configurable via `DAGSTER_AUTH_REST_WRITE_ROLE`
+
+### 🔐 Security Hardening
+
+* **CSRF protection** — Signed double-submit cookie on login form (stateless, works multi-pod)
+* **XSS prevention** — `html.escape()` on all user-controlled values in login and 403 pages
+* **Open redirect hardening** — Protocol-relative URLs (`//evil.com`) blocked
+* **Empty password rejection** — All backends refuse empty passwords (prevents unauthenticated LDAP binds)
+* **Password hash compatibility** — Accepts `$2a$`/`$2y$` bcrypt prefixes in addition to `$2b$`
+* **Proxy trust enforcement** — `DAGSTER_AUTH_PROXY_TRUSTED_IPS` required in proxy mode
+* **Username sanitization** — Applied in SQL `add_user` (was only in web route)
+* **Metrics hardening** — Removed `username` from metric labels (prevented info leak via `/metrics`)
+
+### 🏗️ Core Improvements
+
+* **Patch resilience** — Async/sync detection via `iscoroutinefunction`, `try/except` fallback to vanilla Dagster, idempotency guard
+* **Backend instance caching** — Backend connections reused across requests (prevents connection pool exhaustion)
+* **Dual rate-limiting** — Independent limits per username AND per IP
+* **Unified role serialization** — `AuthUser.to_dict()` uses `role.value` (int) for cross-backend consistency
+* **LDAP fixes** — Connection leak fixed (`try/finally`), timeout on all connections, single-value attribute handling
+* **Health check** — Database check works for both `sql` and `sqlite` backends via cached Peewee connection
+* **OAuth stub** — `OAuthBackend` class implemented (was empty file causing import errors)
+* **Blocking I/O** — `backend.authenticate()` runs via `run_in_threadpool` to avoid event loop starvation
+
+### 🐛 Bug Fixes
+
+* `change_role` now revokes sessions (was missing `revoke_all` call)
+* Audit JSON now reflects actual method/path for REST denials (was hardcoded `POST /graphql`)
+* `_find_user_dn` connection cleanup on LDAP exceptions
+* Non-dict GraphQL payloads rejected with 400 instead of AttributeError
+* CLI `delete-user` message corrected (soft-delete, not permanent)
+* `verify_patches()` checks sentinel (was always returning `True`)
+* Bare `except:` replaced with explicit exception types
+* Portuguese comments translated to English
+* `datetime.utcnow()` replaced with `datetime.now(timezone.utc)`
+* `InMemoryRateLimiter` prunes empty entries to prevent memory leak
+
+### 📚 Testing
+
+* 258 unit + integration tests across 14 test files
+* Multi-pod integration tests (session + CSRF portability)
+* `operationName` and fragment traversal tests for GraphQL analyzer
+* Security regression tests (empty password, XSS escape, open redirect, RBAC default-deny)
+
+### 🔧 Configuration Changes
+
+**New Environment Variables:**
+```bash
+DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE   # Role for unrecognized mutations (default: ADMIN)
+DAGSTER_AUTH_REST_WRITE_ROLE         # Minimum role for REST write requests (default: EDITOR)
+DAGSTER_AUTH_PROXY_TRUSTED_IPS       # Comma-separated proxy IPs (REQUIRED in proxy mode)
+DAGSTER_AUTH_PROXY_TRUST_ALL         # Opt-in to proxy mode without IP allowlist (default: false)
+```
+
+### ⚠️ Breaking Changes
+
+* **`SECRET_KEY` is now required in production.** Server refuses to start without it.
+* **Proxy mode requires `DAGSTER_AUTH_PROXY_TRUSTED_IPS`** or explicit `TRUST_ALL=true`.
+* **`AuthUser.to_dict()` now serializes role as int** (`40`) instead of string (`"ADMIN"`). `from_dict()` handles both formats (backward-compatible).
+* **Database migration** — `session_version` column added to `users` table. Automatic on boot; manual fallback documented.
+* **Default RBAC posture changed** — Unknown mutations now require `ADMIN` instead of being open.
+* **`SESSION_COOKIE_SECURE` now defaults to `true`** (was `false`).
+
+---
+
+## [Unreleased]
+
+### Planned Features
+- Helm chart for Kubernetes deployments
+- OIDC backend (native, beyond proxy mode)
+- Fine-grained asset-level RBAC
 
 ### 🚀 Major Changes
 

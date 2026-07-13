@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dagster-authkit"
-version = "0.3.0"
+version = "0.4.0"
 description = "Community Auth System for self-hosted Dagster OSS - RBAC, Audit Logging, and Session Management"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -94,6 +94,7 @@ sql = "dagster_authkit.auth.backends.sql:PeeweeAuthBackend"
 sqlite = "dagster_authkit.auth.backends.sql:PeeweeAuthBackend" # Alias for compatibility
 ldap = "dagster_authkit.auth.backends.ldap:LDAPAuthBackend"
 proxy = "dagster_authkit.auth.backends.proxy:ProxyAuthBackend"
+oauth = "dagster_authkit.auth.backends.oauth:OAuthBackend"
 
 [tool.setuptools.packages.find]
 where = ["."]
