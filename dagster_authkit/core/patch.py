@@ -2,6 +2,7 @@
 Dagster Monkey-Patching Module
 
 Injects user profile into Dagster sidebar with:
+
 - Async/sync detection for cross-version Dagster compatibility
 - Resilient injection that falls back to vanilla Dagster on failure
 - Multiple CSS selector fallbacks for version compatibility
@@ -66,10 +67,12 @@ def apply_patches() -> None:
             routes_list = original_build_routes(self)
 
             auth_routes = create_auth_routes()
-            auth_routes.routes.extend([
-                Route("/health", health_endpoint, methods=["GET"]),
-                Route("/metrics", metrics_endpoint, methods=["GET"]),
-            ])
+            auth_routes.routes.extend(
+                [
+                    Route("/health", health_endpoint, methods=["GET"]),
+                    Route("/metrics", metrics_endpoint, methods=["GET"]),
+                ]
+            )
 
             routes_list.insert(0, Mount("/auth", routes=auth_routes.routes))
             return routes_list
@@ -85,9 +88,12 @@ def apply_patches() -> None:
         original_index_html = webserver_module.DagsterWebserver.index_html_endpoint
 
         if inspect.iscoroutinefunction(original_index_html):
+
             async def patched_index_html(self, request: Request):
                 return await _inject_resilient_ui(self, request)
+
         else:
+
             def patched_index_html(self, request: Request):
                 return _inject_resilient_ui(self, request)
 
@@ -143,8 +149,7 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
                 }
             )
             # Prevent XSS via </script> in user data (e.g., LDAP full_name)
-            .replace("<", "\\u003c")
-            .replace(">", "\\u003e")
+            .replace("<", "\\u003c").replace(">", "\\u003e")
         )
 
         injection = render_user_menu_injection(

@@ -43,7 +43,9 @@ class TestDummyAuthBackend:
             ("viewer", "viewer", Role.VIEWER, "viewer@localhost"),
         ],
     )
-    def test_authenticate_valid_users(self, backend, username, password, expected_role, expected_email):
+    def test_authenticate_valid_users(
+        self, backend, username, password, expected_role, expected_email
+    ):
         """All four hardcoded users should authenticate with correct credentials."""
         user = backend.authenticate(username, password)
         assert user is not None

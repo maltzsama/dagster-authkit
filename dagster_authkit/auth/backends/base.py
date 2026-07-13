@@ -115,7 +115,9 @@ class RolePermissions:
     )
 
     @classmethod
-    def get_required_role(cls, mutation_name: str, default_role: Optional[Role] = None) -> Optional[Role]:
+    def get_required_role(
+        cls, mutation_name: str, default_role: Optional[Role] = None
+    ) -> Optional[Role]:
         """
         Get the minimum required role for a GraphQL mutation.
 

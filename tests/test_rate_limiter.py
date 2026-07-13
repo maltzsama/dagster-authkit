@@ -169,6 +169,7 @@ class TestInMemoryRateLimiterOOM:
 
         # Wait for entries to expire
         import time
+
         time.sleep(1.1)
 
         # Force prune check (bypasses the 60s interval by setting last_cleanup back)

@@ -2,9 +2,12 @@
 Authentication Middleware — Pure ASGI (not BaseHTTPMiddleware).
 
 Why pure ASGI:
+
 - BaseHTTPMiddleware only handles scope["type"] == "http", so WebSocket
   connections (Dagster GraphQL subscriptions at /graphql) bypass auth entirely.
+
 - Pure ASGI intercepts both HTTP and WebSocket scopes.
+
 - Also solves the CORS ordering problem: as a pure ASGI middleware we sit at the
   right layer regardless of insert position.
 """
@@ -40,13 +43,15 @@ class DagsterAuthMiddleware:
     subscriptions at /graphql are authenticated via session cookie.
     """
 
-    PUBLIC_PATHS: frozenset[str] = frozenset({
-        "/auth/login",
-        "/auth/logout",
-        "/auth/process",
-        "/auth/health",
-        "/auth/metrics",
-    })
+    PUBLIC_PATHS: frozenset[str] = frozenset(
+        {
+            "/auth/login",
+            "/auth/logout",
+            "/auth/process",
+            "/auth/health",
+            "/auth/metrics",
+        }
+    )
 
     PUBLIC_PREFIXES: tuple[str, ...] = (
         "/auth/",
@@ -119,7 +124,13 @@ class DagsterAuthMiddleware:
 
         if not user:
             logger.warning(f"WebSocket auth failed for {path}")
-            await send({"type": "websocket.close", "code": _WS_CLOSE_UNAUTHORIZED, "reason": "Unauthorized"})
+            await send(
+                {
+                    "type": "websocket.close",
+                    "code": _WS_CLOSE_UNAUTHORIZED,
+                    "reason": "Unauthorized",
+                }
+            )
             return
 
         logger.debug(f"WebSocket authenticated: {user.username} on {path}")
@@ -151,7 +162,7 @@ class DagsterAuthMiddleware:
         if self.is_proxy_mode and path in ["/auth/login", "/auth/process"]:
             response = Response(
                 content="This endpoint is disabled in proxy auth mode. "
-                        "Authentication is handled by Authelia.",
+                "Authentication is handled by Authelia.",
                 status_code=404,
             )
             await response(scope, receive, send)
@@ -182,7 +193,10 @@ class DagsterAuthMiddleware:
         else:
             user = self._get_authenticated_user(request)
             if not user:
-                if path == "/graphql" or request.headers.get("x-requested-with") == "XMLHttpRequest":
+                if (
+                    path == "/graphql"
+                    or request.headers.get("x-requested-with") == "XMLHttpRequest"
+                ):
                     response = Response(content="Unauthorized", status_code=401)
                 else:
                     response = RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
@@ -221,13 +235,16 @@ class DagsterAuthMiddleware:
 
                 for mutation_name in mutation_names:
                     required_role = RolePermissions.get_required_role(
-                        mutation_name, default_role=self._unknown_mutation_role,
+                        mutation_name,
+                        default_role=self._unknown_mutation_role,
                     )
 
                     if required_role and not user.can(required_role):
                         self._log_denied(user, mutation_name, required_role)
                         track_rbac_decision(False, user.role.name, mutation_name)
-                        response = self._generate_dagster_error_response(user, mutation_name, required_role)
+                        response = self._generate_dagster_error_response(
+                            user, mutation_name, required_role
+                        )
                         await response(scope, receive, send)
                         return
 
@@ -242,8 +259,11 @@ class DagsterAuthMiddleware:
 
         elif method in self.WRITE_METHODS and not user.can(self._rest_write_role):
             self._log_denied(
-                user, f"REST {method} {path}", self._rest_write_role,
-                method=method, path=path,
+                user,
+                f"REST {method} {path}",
+                self._rest_write_role,
+                method=method,
+                path=path,
             )
             response = self._forbidden_html_response(
                 user, path, method, f"REQUIRES_{self._rest_write_role.name}"
@@ -270,8 +290,7 @@ class DagsterAuthMiddleware:
                 )
                 headers.update(SecurityHardening.get_security_headers())
                 message["headers"] = [
-                    (k.encode("latin-1"), v.encode("latin-1"))
-                    for k, v in headers.items()
+                    (k.encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
                 ]
             await send(message)
 
@@ -355,9 +374,7 @@ class DagsterAuthMiddleware:
     # ================================================================
 
     def _is_public_path(self, path: str) -> bool:
-        return path in self.PUBLIC_PATHS or any(
-            path.startswith(p) for p in self.PUBLIC_PREFIXES
-        )
+        return path in self.PUBLIC_PATHS or any(path.startswith(p) for p in self.PUBLIC_PREFIXES)
 
     def _is_request_from_trusted_proxy(self, request: Request) -> bool:
         trusted = config.DAGSTER_AUTH_PROXY_TRUSTED_IPS

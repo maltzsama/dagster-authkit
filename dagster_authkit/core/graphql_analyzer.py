@@ -6,7 +6,13 @@ Replaces fragile regex-based approach with AST parsing to accurately identify mu
 import logging
 from typing import Optional, Set
 
-from graphql import parse, OperationDefinitionNode, FieldNode, FragmentSpreadNode, InlineFragmentNode
+from graphql import (
+    parse,
+    OperationDefinitionNode,
+    FieldNode,
+    FragmentSpreadNode,
+    InlineFragmentNode,
+)
 from graphql.language.ast import DocumentNode, FragmentDefinitionNode
 
 logger = logging.getLogger(__name__)
@@ -65,9 +71,7 @@ class GraphQLMutationAnalyzer:
             return False
 
     @staticmethod
-    def _find_mutations_in_ast(
-        ast: DocumentNode, operation_name: Optional[str] = None
-    ) -> Set[str]:
+    def _find_mutations_in_ast(ast: DocumentNode, operation_name: Optional[str] = None) -> Set[str]:
         """Walk AST and collect all mutation field names, traversing fragments."""
         mutations = set()
         fragment_definitions = {}

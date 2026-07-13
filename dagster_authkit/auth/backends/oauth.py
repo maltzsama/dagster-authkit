@@ -33,8 +33,7 @@ class OAuthBackend(AuthBackend):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         logger.warning(
-            "OAuthBackend is not yet implemented. "
-            "OAuth support is planned for a future release."
+            "OAuthBackend is not yet implemented. " "OAuth support is planned for a future release."
         )
 
     def get_name(self) -> str:

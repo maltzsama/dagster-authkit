@@ -91,9 +91,7 @@ class TestProxyAuthBackend:
 
     def test_parse_ldap_dn_single(self, backend):
         """A single LDAP DN should be returned as one group."""
-        groups = backend._parse_groups_header(
-            "cn=admins,ou=groups,dc=company,dc=com"
-        )
+        groups = backend._parse_groups_header("cn=admins,ou=groups,dc=company,dc=com")
         assert groups == ["cn=admins,ou=groups,dc=company,dc=com"]
 
     def test_parse_ldap_dn_multiple_semicolon(self, backend):

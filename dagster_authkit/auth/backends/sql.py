@@ -31,7 +31,9 @@ class UserTable(Model):
     is_active = BooleanField(default=True)
     created_at = DateTimeField(default=lambda: datetime.now(timezone.utc))
     last_login = DateTimeField(null=True)
-    session_version = IntegerField(default=1)  # Bumped on revoke_all, change_password, change_role, delete_user
+    session_version = IntegerField(
+        default=1
+    )  # Bumped on revoke_all, change_password, change_role, delete_user
 
     class Meta:
         table_name = "users"
@@ -244,9 +246,7 @@ class PeeweeAuthBackend(AuthBackend):
             columns = [col.name for col in self.db.get_columns("users")]
             if "session_version" in columns:
                 return
-            self.db.execute_sql(
-                "ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1"
-            )
+            self.db.execute_sql("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1")
             logger.info("Migration: added session_version column to users table")
         except Exception as e:
             raise RuntimeError(

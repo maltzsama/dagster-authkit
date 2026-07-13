@@ -120,6 +120,7 @@ class LDAPAuthBackend(AuthBackend):
 
     def _build_auth_user(self, username: str, role: Role, attrs: Dict[str, List[str]]) -> AuthUser:
         """Build an AuthUser from LDAP attributes (shared between authenticate and get_user)."""
+
         def _first(attr_name: str) -> str:
             val = attrs.get(attr_name, "")
             if isinstance(val, list):
@@ -293,10 +294,12 @@ class LDAPAuthBackend(AuthBackend):
                 attrs = response[0].get("attributes", {})
 
                 # DEBUG: Show LDAP attributes
-                logger.debug(f"LDAP attributes fetched for {user_dn}: "
-                            f"displayName={attrs.get('displayName')}, "
-                            f"cn={attrs.get('cn')}, "
-                            f"mail={attrs.get('mail')}")
+                logger.debug(
+                    f"LDAP attributes fetched for {user_dn}: "
+                    f"displayName={attrs.get('displayName')}, "
+                    f"cn={attrs.get('cn')}, "
+                    f"mail={attrs.get('mail')}"
+                )
 
                 return attrs
 

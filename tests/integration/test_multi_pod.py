@@ -90,5 +90,6 @@ class TestCrossPodCSRF:
         raw_token = s1.dumps({"token": "abc"})
 
         import pytest
+
         with pytest.raises(Exception):
             s2.loads(raw_token, max_age=3600)

@@ -181,6 +181,7 @@ class CookieBackend(SessionBackend):
 
         try:
             from dagster_authkit.auth.backends.sql import PeeweeAuthBackend
+
             self._version_getter = PeeweeAuthBackend.get_session_version
             logger.info(
                 "CookieBackend: DB-backed session version enabled "

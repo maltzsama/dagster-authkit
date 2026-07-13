@@ -13,6 +13,7 @@ Public API:
 - ``log_rate_limit_violation`` — brute-force protection trigger
 - ``log_password_changed``     — credential rotation
 """
+
 import json
 import logging
 import sys
