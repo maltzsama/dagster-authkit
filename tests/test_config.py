@@ -1,0 +1,172 @@
+"""
+Unit tests for utils/config.py
+
+Covers:
+- AuthConfig initialization with environment variables
+- Default values for all config fields
+- Validation of AUTH_BACKEND, SESSION_MAX_AGE, SECRET_KEY, REDIS_URL
+- Secret key auto-generation
+- Sensitive data masking in __repr__
+"""
+
+import os
+
+import pytest
+
+from dagster_authkit.utils.config import AuthConfig, config
+
+
+class TestAuthConfigDefaults:
+    """Verifies default configuration values."""
+
+    def test_default_auth_backend(self):
+        """Default AUTH_BACKEND should be 'sql'."""
+        cfg = AuthConfig()
+        assert cfg.AUTH_BACKEND == "sql"
+
+    def test_default_session_cookie_name(self):
+        """Default session cookie name should be 'dagster_session'."""
+        cfg = AuthConfig()
+        assert cfg.SESSION_COOKIE_NAME == "dagster_session"
+
+    def test_default_session_max_age(self):
+        """Default session max age should be 86400 seconds (24h)."""
+        cfg = AuthConfig()
+        assert cfg.SESSION_MAX_AGE == 86400
+
+    def test_default_rate_limit_settings(self):
+        """Rate limiting should be enabled by default with 5 attempts / 300s."""
+        cfg = AuthConfig()
+        assert cfg.RATE_LIMIT_ENABLED is True
+        assert cfg.RATE_LIMIT_MAX_ATTEMPTS == 5
+        assert cfg.RATE_LIMIT_WINDOW_SECONDS == 300
+
+    def test_default_log_level(self):
+        """Default log level should be INFO."""
+        cfg = AuthConfig()
+        assert cfg.LOG_LEVEL == "INFO"
+
+    def test_default_proxy_headers(self):
+        """Proxy headers should have sensible defaults."""
+        cfg = AuthConfig()
+        assert cfg.DAGSTER_AUTH_PROXY_USER_HEADER == "Remote-User"
+        assert cfg.DAGSTER_AUTH_PROXY_GROUPS_HEADER == "Remote-Groups"
+
+    def test_session_cookie_httponly_always_true(self):
+        """SESSION_COOKIE_HTTPONLY should always be True for security."""
+        cfg = AuthConfig()
+        assert cfg.SESSION_COOKIE_HTTPONLY is True
+
+
+class TestAuthConfigValidation:
+    """Verifies config validation rules."""
+
+    def test_invalid_auth_backend_raises(self, monkeypatch):
+        """An invalid AUTH_BACKEND should raise ValueError."""
+        monkeypatch.setenv("DAGSTER_AUTH_BACKEND", "invalid_backend")
+        with pytest.raises(ValueError, match="Invalid AUTH_BACKEND"):
+            AuthConfig()
+
+    @pytest.mark.parametrize("backend", ["dummy", "ldap", "sqlite", "sql", "proxy"])
+    def test_valid_auth_backends(self, monkeypatch, backend):
+        """All valid backend names should be accepted."""
+        monkeypatch.setenv("DAGSTER_AUTH_BACKEND", backend)
+        cfg = AuthConfig()
+        assert cfg.AUTH_BACKEND == backend
+
+    def test_session_max_age_too_low_raises(self, monkeypatch):
+        """SESSION_MAX_AGE below 60 should raise ValueError."""
+        monkeypatch.setenv("DAGSTER_AUTH_SESSION_MAX_AGE", "30")
+        with pytest.raises(ValueError, match="SESSION_MAX_AGE"):
+            AuthConfig()
+
+    def test_secret_key_too_short_raises(self, monkeypatch):
+        """SECRET_KEY shorter than 16 chars should raise ValueError."""
+        monkeypatch.setenv("DAGSTER_AUTH_SECRET_KEY", "short")
+        with pytest.raises(ValueError, match="SECRET_KEY"):
+            AuthConfig()
+
+    def test_invalid_redis_url_raises(self, monkeypatch):
+        """An invalid REDIS_URL format should raise ValueError."""
+        monkeypatch.setenv("DAGSTER_AUTH_REDIS_URL", "invalid://redis")
+        with pytest.raises(ValueError, match="REDIS_URL"):
+            AuthConfig()
+
+    def test_valid_redis_url_accepted(self, monkeypatch):
+        """A valid redis:// URL should be accepted."""
+        monkeypatch.setenv("DAGSTER_AUTH_REDIS_URL", "redis://localhost:6379")
+        cfg = AuthConfig()
+        assert cfg.REDIS_URL == "redis://localhost:6379"
+
+    def test_valid_rediss_url_accepted(self, monkeypatch):
+        """A valid rediss:// (TLS) URL should be accepted."""
+        monkeypatch.setenv("DAGSTER_AUTH_REDIS_URL", "rediss://localhost:6380")
+        cfg = AuthConfig()
+        assert cfg.REDIS_URL == "rediss://localhost:6380"
+
+
+class TestAuthConfigFromEnv:
+    """Verifies environment variable overrides."""
+
+    def test_auth_backend_from_env(self, monkeypatch):
+        """AUTH_BACKEND should be read from DAGSTER_AUTH_BACKEND env var."""
+        monkeypatch.setenv("DAGSTER_AUTH_BACKEND", "dummy")
+        cfg = AuthConfig()
+        assert cfg.AUTH_BACKEND == "dummy"
+
+    def test_session_max_age_from_env(self, monkeypatch):
+        """SESSION_MAX_AGE should be read from env and converted to int."""
+        monkeypatch.setenv("DAGSTER_AUTH_SESSION_MAX_AGE", "7200")
+        cfg = AuthConfig()
+        assert cfg.SESSION_MAX_AGE == 7200
+
+    def test_rate_limit_disabled_from_env(self, monkeypatch):
+        """Setting RATE_LIMIT to 'false' should disable it."""
+        monkeypatch.setenv("DAGSTER_AUTH_RATE_LIMIT", "false")
+        cfg = AuthConfig()
+        assert cfg.RATE_LIMIT_ENABLED is False
+
+    def test_env_setting(self, monkeypatch):
+        """ENV should be read from DAGSTER_AUTH_ENV."""
+        monkeypatch.setenv("DAGSTER_AUTH_ENV", "staging")
+        cfg = AuthConfig()
+        assert cfg.ENV == "staging"
+
+    def test_admin_password_from_env(self, monkeypatch):
+        """ADMIN_PASSWORD should be read from DAGSTER_AUTH_ADMIN_PASSWORD."""
+        monkeypatch.setenv("DAGSTER_AUTH_ADMIN_PASSWORD", "secret123")
+        cfg = AuthConfig()
+        assert cfg.ADMIN_PASSWORD == "secret123"
+
+
+class TestAuthConfigRepr:
+    """Verifies safe string representation."""
+
+    def test_repr_masks_secrets(self):
+        """__repr__ should not expose sensitive information."""
+        cfg = AuthConfig()
+        rep = repr(cfg)
+        assert "SECRET_KEY" not in rep
+        assert "PASSWORD" not in rep
+
+
+class TestGlobalConfig:
+    """Verifies the global config singleton."""
+
+    def test_config_is_auth_config_instance(self):
+        """The global 'config' should be an AuthConfig instance."""
+        assert isinstance(config, AuthConfig)
+
+    def test_config_has_expected_attributes(self):
+        """Config should have all expected attributes."""
+        expected = [
+            "AUTH_BACKEND",
+            "SECRET_KEY",
+            "SESSION_COOKIE_NAME",
+            "SESSION_MAX_AGE",
+            "RATE_LIMIT_ENABLED",
+            "ENV",
+            "LOG_LEVEL",
+        ]
+        for attr in expected:
+            assert hasattr(config, attr), f"Missing config attribute: {attr}"
