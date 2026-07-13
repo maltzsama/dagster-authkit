@@ -174,7 +174,7 @@ class DagsterAuthMiddleware:
         if path == "/graphql" and method == "POST":
             body = await request.body()
             graphql_data = self._parse_json(body)
-            queries = graphql_data if isinstance(graphql_data, list) else [graphql_data]
+            queries = self._normalize_graphql_items(graphql_data)
 
             for g_item in queries:
                 query_str = g_item.get("query", "")
@@ -359,6 +359,18 @@ class DagsterAuthMiddleware:
             return json.loads(body.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
+
+    @staticmethod
+    def _normalize_graphql_items(data) -> list[dict]:
+        """Ensure each GraphQL request item is a dict. Rejects non-dict payloads."""
+        items = data if isinstance(data, list) else [data]
+        result = []
+        for item in items:
+            if not isinstance(item, dict):
+                logger.warning(f"Rejected non-dict GraphQL payload item: {type(item)}")
+                return []
+            result.append(item)
+        return result
 
     @staticmethod
     def _generate_dagster_error_response(user, mutation, role) -> Response:

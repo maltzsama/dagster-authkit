@@ -160,7 +160,7 @@ def list_users_command(args):
 
 
 def delete_user_command(args):
-    """Permanently delete a user from the database."""
+    """Deactivate a user (soft delete)."""
     backend = _get_backend(args.db_path)
 
     if not args.yes:

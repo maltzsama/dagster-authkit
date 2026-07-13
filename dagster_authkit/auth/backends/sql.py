@@ -193,10 +193,14 @@ class PeeweeAuthBackend(AuthBackend):
         ]
 
     def change_role(self, username: str, new_role: Role, performed_by: str = "system") -> bool:
-        """Updates user role and logs the permission change."""
+        """Updates user role, revokes all active sessions, and logs the permission change."""
         query = UserTable.update(role_value=new_role.value).where(UserTable.username == username)
 
         if query.execute() > 0:
+            # Revoke all sessions: the old role is still cached in the cookie
+            from dagster_authkit.auth.session import sessions
+            sessions.revoke_all(username)
+
             log_audit_event("ROLE_CHANGED", performed_by, target=username, new_role=new_role.name)
             return True
         return False
