@@ -19,8 +19,9 @@ from dagster_authkit.utils.config import AuthConfig, config
 class TestAuthConfigDefaults:
     """Verifies default configuration values."""
 
-    def test_default_auth_backend(self):
-        """Default AUTH_BACKEND should be 'sql'."""
+    def test_default_auth_backend(self, monkeypatch):
+        """Default AUTH_BACKEND should be 'sql' (factory default, no env set)."""
+        monkeypatch.delenv("DAGSTER_AUTH_BACKEND", raising=False)
         cfg = AuthConfig()
         assert cfg.AUTH_BACKEND == "sql"
 
