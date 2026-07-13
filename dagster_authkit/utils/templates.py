@@ -7,6 +7,21 @@ import html
 
 
 def render_login_page(next_url: str = "/", error: str = "", csrf_token: str = "") -> str:
+    """
+    Render the Dagster AuthKit login page.
+
+    Produces a self-contained HTML document styled with the Dagster
+    design system (Geist Sans font, CSS custom properties, dark mode).
+    All user-supplied values are HTML-escaped before interpolation.
+
+    Args:
+        next_url:   Redirect destination after successful login.
+        error:      Optional error message displayed above the form.
+        csrf_token: Signed CSRF token injected as a hidden form field.
+
+    Returns:
+        Complete HTML string (``<!DOCTYPE html>`` to ``</html>``).
+    """
     safe_next = html.escape(next_url, quote=True)
     safe_error = html.escape(error, quote=True)
     safe_csrf = html.escape(csrf_token, quote=True)
@@ -210,6 +225,21 @@ def render_login_page(next_url: str = "/", error: str = "", csrf_token: str = ""
 
 
 def render_403_page(user, path: str, method: str, reason: str) -> str:
+    """
+    Render a 403 Forbidden error page.
+
+    Displays the user's identity, role, the blocked request details,
+    and the reason for denial. All values are HTML-escaped.
+
+    Args:
+        user:   AuthUser instance (must have .username, .role attributes).
+        path:   Requested URL path that was blocked.
+        method: HTTP method of the blocked request.
+        reason: Human-readable RBAC denial reason.
+
+    Returns:
+        Complete HTML string.
+    """
     safe_username = html.escape(user.username, quote=True)
     safe_role = html.escape(user.role.name, quote=True)
     safe_method = html.escape(method, quote=True)
@@ -262,6 +292,22 @@ def render_403_page(user, path: str, method: str, reason: str) -> str:
 
 
 def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool) -> str:
+    """
+    Render the client-side JavaScript that injects the AuthKit user
+    profile menu into the Dagster UI sidebar.
+
+    Uses resilient retry logic with multiple CSS selector fallbacks
+    for cross-version Dagster compatibility. When the sidebar cannot
+    be located, an optional safe-mode corner menu is rendered.
+
+    Args:
+        user_data_json: JSON-serialized user object (XSS-escaped by caller).
+        debug:          Enable verbose client-side console logging.
+        safe_mode:      Activate safe-mode corner menu on injection failure.
+
+    Returns:
+        String containing ``<style>`` and ``<script>`` blocks.
+    """
     html = f"""
         <!-- Dagster AuthKit - Resilient UI Injection v1.0 -->
         <style>

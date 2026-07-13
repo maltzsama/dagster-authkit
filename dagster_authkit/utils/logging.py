@@ -4,7 +4,15 @@ from dagster_authkit.utils.config import config
 
 
 def setup_logging():
-    """Configura o logging baseado no seu config.py original."""
+    """
+    Configure the ``dagster_authkit`` logger from ``AuthConfig.LOG_LEVEL``.
+
+    Sets up basic stdout logging with timestamp, level, logger name,
+    and message format.
+
+    Returns:
+        ``logging.Logger`` instance named ``dagster_authkit``.
+    """
     log_level = getattr(logging, config.LOG_LEVEL.upper(), logging.INFO)
 
     logging.basicConfig(

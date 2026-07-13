@@ -11,6 +11,66 @@ class AuthConfig:
     """Centralized configuration for the authentication system."""
 
     def __init__(self):
+        """
+        Initialise authentication configuration from environment variables.
+
+        **Session settings:**
+            ``DAGSTER_AUTH_SECRET_KEY``            Required in production. Signing secret.
+            ``DAGSTER_AUTH_COOKIE_NAME``           Default: ``dagster_session``
+            ``DAGSTER_AUTH_SESSION_MAX_AGE``       Default: ``86400`` (24h, seconds)
+            ``DAGSTER_AUTH_COOKIE_SECURE``         Default: ``true``
+            ``DAGSTER_AUTH_COOKIE_SAMESITE``       Default: ``lax``
+
+        **Backend selection:**
+            ``DAGSTER_AUTH_BACKEND``               Default: ``sql``
+                                                   One of: dummy, ldap, oauth, sqlite, sql, proxy
+
+        **Redis (distributed sessions & rate limiting):**
+            ``DAGSTER_AUTH_REDIS_URL``             Optional. Enables Redis backend.
+
+        **Database (Peewee SQL):**
+            ``DAGSTER_AUTH_DB``                    Default: ``./dagster_auth.db``
+            ``DAGSTER_AUTH_DATABASE_URL``          DSN, auto-derived from above
+
+        **Rate limiting:**
+            ``DAGSTER_AUTH_RATE_LIMIT``            Default: ``true``
+            ``DAGSTER_AUTH_RATE_LIMIT_ATTEMPTS``   Default: ``5``
+            ``DAGSTER_AUTH_RATE_LIMIT_WINDOW``     Default: ``300`` (seconds)
+
+        **LDAP (when backend=ldap):**
+            ``DAGSTER_AUTH_LDAP_SERVER``, ``DAGSTER_AUTH_LDAP_BASE_DN``,
+            ``DAGSTER_AUTH_LDAP_BIND_DN``, ``DAGSTER_AUTH_LDAP_BIND_PASSWORD``,
+            ``DAGSTER_AUTH_LDAP_USER_FILTER``      Default: ``(uid={username})``
+            ``DAGSTER_AUTH_LDAP_USE_TLS``          Default: ``false``
+            ``DAGSTER_AUTH_LDAP_CA_CERT``, ``DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE``,
+            ``DAGSTER_AUTH_LDAP_GROUP_PATTERN``,
+            ``DAGSTER_AUTH_LDAP_TIMEOUT``          Default: ``10`` (seconds)
+
+        **Proxy auth (when backend=proxy):**
+            ``DAGSTER_AUTH_PROXY_USER_HEADER``     Default: ``Remote-User``
+            ``DAGSTER_AUTH_PROXY_GROUPS_HEADER``   Default: ``Remote-Groups``
+            ``DAGSTER_AUTH_PROXY_EMAIL_HEADER``    Default: ``Remote-Email``
+            ``DAGSTER_AUTH_PROXY_NAME_HEADER``     Default: ``Remote-Name``
+            ``DAGSTER_AUTH_PROXY_GROUP_PATTERN``   LDAP DN pattern for role mapping
+            ``DAGSTER_AUTH_PROXY_LOGOUT_URL``      Default: ``https://auth.company.com/logout``
+            ``DAGSTER_AUTH_PROXY_TRUSTED_IPS``     Required (space/comma-separated)
+            ``DAGSTER_AUTH_PROXY_TRUST_ALL``       Default: ``false`` — opt-in insecure
+
+        **RBAC:**
+            ``DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE`` Default: ``ADMIN`` — deny-by-default
+            ``DAGSTER_AUTH_REST_WRITE_ROLE``       Default: ``EDITOR``
+
+        **Bootstrap:**
+            ``DAGSTER_AUTH_ADMIN_PASSWORD``        Auto-creates admin on first run
+
+        **Logging:**
+            ``DAGSTER_AUTH_ENV``                   Default: ``production``
+            ``DAGSTER_AUTH_LOG_LEVEL``             Default: ``INFO``
+            ``DAGSTER_AUTH_AUDIT_LOG``             Default: ``true``
+
+        Raises:
+            ValueError: If any setting is invalid or a required value is missing.
+        """
         # Environment metadata for Audit Logging
         self.ENV = os.getenv("DAGSTER_AUTH_ENV", "production")
 

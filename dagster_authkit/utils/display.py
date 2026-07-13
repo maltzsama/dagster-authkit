@@ -37,7 +37,10 @@ def print_config_summary(config_dict):
 
 def show_security_banner(admin_pw: str):
     """
-    Displays first-run credentials with a high-visibility border.
+    Display first-run credentials with a high-visibility border.
+
+    Args:
+        admin_pw: Auto-generated admin password to display.
     """
     width = 60
     header = "🚀 FIRST RUN: ADMIN ACCOUNT CREATED"
