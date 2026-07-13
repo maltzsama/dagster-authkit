@@ -1,0 +1,31 @@
+✅ Dagster AuthKit {{ .Chart.AppVersion }} installed!
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ (index .Values.ingress.hosts 0).host }}
+{{- else }}
+  kubectl port-forward svc/{{ include "dagster-authkit.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  http://localhost:{{ .Values.service.port }}
+{{- end }}
+
+2. If you set authkit.adminPassword, the admin user is already created.
+   Username: admin
+
+   If authkit.adminPassword is empty, no admin is bootstrapped.
+   Create one manually:
+     kubectl exec deploy/{{ include "dagster-authkit.fullname" . }} -- dagster-authkit add-user admin --admin
+
+3. If you didn't set a workspace, the server starts with --empty-workspace.
+   Set dagster.workspace.module or dagster.workspace.file in your values.
+
+⚠️  Important:
+   - Set authkit.existingSecret to use a pre-created Secret (Vault, External Secrets).
+   - Or set authkit.secretKey directly (chart creates its own Secret).
+{{- if and (gt (int .Values.replicaCount) 1) (not .Values.authkit.redisUrl) }}
+
+⚠️  replicaCount > 1 without authkit.redisUrl:
+   - Rate limiting and individual logout are per-pod only.
+   - Global session revocation (change_password, change_role, delete_user)
+     still works cross-pod via DB-backed session_version.
+   - Set authkit.redisUrl for full multi-pod parity.
+{{- end }}

@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dagster-authkit.fullname" . }}-config
+  labels:
+    {{- include "dagster-authkit.labels" . | nindent 4 }}
+data:
+  DAGSTER_AUTH_BACKEND: {{ .Values.authkit.backend | quote }}
+  DAGSTER_AUTH_SESSION_MAX_AGE: {{ .Values.authkit.sessionMaxAge | quote }}
+  DAGSTER_AUTH_COOKIE_SECURE: {{ .Values.authkit.cookieSecure | quote }}
+  DAGSTER_AUTH_COOKIE_SAMESITE: {{ .Values.authkit.cookieSameSite | quote }}
+  DAGSTER_AUTH_DATABASE_URL: {{ .Values.authkit.databaseUrl | quote }}
+  DAGSTER_AUTH_LOG_LEVEL: {{ .Values.authkit.logLevel | quote }}
+  DAGSTER_AUTH_AUDIT_LOG: {{ .Values.authkit.auditLog | quote }}
+  DAGSTER_AUTH_RATE_LIMIT: {{ .Values.authkit.rateLimit.enabled | quote }}
+  DAGSTER_AUTH_RATE_LIMIT_ATTEMPTS: {{ .Values.authkit.rateLimit.maxAttempts | quote }}
+  DAGSTER_AUTH_RATE_LIMIT_WINDOW: {{ .Values.authkit.rateLimit.windowSeconds | quote }}
+  DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE: {{ .Values.authkit.rbac.unknownMutationRole | quote }}
+  DAGSTER_AUTH_REST_WRITE_ROLE: {{ .Values.authkit.rbac.restWriteRole | quote }}
+  DAGSTER_AUTH_PROXY_USER_HEADER: {{ .Values.authkit.proxy.userHeader | quote }}
+  DAGSTER_AUTH_PROXY_GROUPS_HEADER: {{ .Values.authkit.proxy.groupsHeader | quote }}
+  DAGSTER_AUTH_PROXY_EMAIL_HEADER: {{ .Values.authkit.proxy.emailHeader | quote }}
+  DAGSTER_AUTH_PROXY_NAME_HEADER: {{ .Values.authkit.proxy.nameHeader | quote }}
+  {{- if eq .Values.authkit.backend "proxy" }}
+  DAGSTER_AUTH_PROXY_LOGOUT_URL: {{ required "authkit.proxy.logoutUrl is required when backend=proxy" .Values.authkit.proxy.logoutUrl | quote }}
+  {{- else }}
+  DAGSTER_AUTH_PROXY_LOGOUT_URL: {{ .Values.authkit.proxy.logoutUrl | quote }}
+  {{- end }}
+  DAGSTER_AUTH_PROXY_TRUST_ALL: {{ .Values.authkit.proxy.trustAll | quote }}
+  DAGSTER_AUTH_LDAP_USE_TLS: {{ .Values.authkit.ldap.useTLS | quote }}
+  DAGSTER_AUTH_LDAP_TIMEOUT: {{ .Values.authkit.ldap.timeout | quote }}
+  {{- if .Values.authkit.redisUrl }}
+  DAGSTER_AUTH_REDIS_URL: {{ .Values.authkit.redisUrl | quote }}
+  {{- end }}
+  {{- if .Values.authkit.proxy.trustedIPs }}
+  DAGSTER_AUTH_PROXY_TRUSTED_IPS: {{ .Values.authkit.proxy.trustedIPs | quote }}
+  {{- end }}
+  {{- if .Values.authkit.proxy.groupPattern }}
+  DAGSTER_AUTH_PROXY_GROUP_PATTERN: {{ .Values.authkit.proxy.groupPattern | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.server }}
+  DAGSTER_AUTH_LDAP_SERVER: {{ .Values.authkit.ldap.server | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.baseDN }}
+  DAGSTER_AUTH_LDAP_BASE_DN: {{ .Values.authkit.ldap.baseDN | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.bindDN }}
+  DAGSTER_AUTH_LDAP_BIND_DN: {{ .Values.authkit.ldap.bindDN | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.userFilter }}
+  DAGSTER_AUTH_LDAP_USER_FILTER: {{ .Values.authkit.ldap.userFilter | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.caCert }}
+  DAGSTER_AUTH_LDAP_CA_CERT: {{ .Values.authkit.ldap.caCert | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.roleAttribute }}
+  DAGSTER_AUTH_LDAP_ROLE_ATTRIBUTE: {{ .Values.authkit.ldap.roleAttribute | quote }}
+  {{- end }}
+  {{- if .Values.authkit.ldap.groupPattern }}
+  DAGSTER_AUTH_LDAP_GROUP_PATTERN: {{ .Values.authkit.ldap.groupPattern | quote }}
+  {{- end }}

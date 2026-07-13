@@ -1,0 +1,113 @@
+{{- if and (contains "sqlite" .Values.authkit.databaseUrl) (or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled) }}
+{{- if not .Values.authkit.redisUrl }}
+{{- fail "SQLite cannot be used with replicaCount > 1 or HPA without Redis. Set authkit.databaseUrl to a PostgreSQL/MySQL DSN, or set replicaCount=1 and disable autoscaling." }}
+{{- end }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dagster-authkit.fullname" . }}
+  labels:
+    {{- include "dagster-authkit.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "dagster-authkit.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.authkit.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "dagster-authkit.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dagster-authkit.fullname" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - -h
+            - "0.0.0.0"
+            - -p
+            - "{{ .Values.service.port }}"
+            {{- if .Values.dagster.workspace.module }}
+            - -m
+            - {{ .Values.dagster.workspace.module | quote }}
+            {{- else if .Values.dagster.workspace.file }}
+            - -f
+            - {{ .Values.dagster.workspace.file | quote }}
+            {{- else }}
+            - --empty-workspace
+            {{- end }}
+            {{- with .Values.dagster.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "dagster-authkit.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.authkit.existingSecret | default (printf "%s-secret" (include "dagster-authkit.fullname" .)) }}
+          env:
+            - name: DAGSTER_HOME
+              value: {{ .Values.dagster.home | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /auth/health?type=live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /auth/health?type=ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "dagster-authkit.fullname" . }}-data
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

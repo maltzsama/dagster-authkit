@@ -1,0 +1,126 @@
+# Default values for dagster-authkit.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: dagster-authkit
+  pullPolicy: IfNotPresent
+  tag: "0.4.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: dagster.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- Dagster AuthKit Configuration ---
+
+authkit:
+  backend: sql
+  existingSecret: ""  # Name of pre-created Secret (Vault, External Secrets, etc.)
+  secretKey: ""  # Used only if existingSecret is empty
+  adminPassword: ""
+
+  sessionMaxAge: 86400
+  cookieSecure: true
+  cookieSameSite: lax
+
+  databaseUrl: sqlite:////data/dagster_auth.db
+
+  redisUrl: ""  # Optional — enables distributed sessions and rate limiting
+
+  rateLimit:
+    enabled: true
+    maxAttempts: 5
+    windowSeconds: 300
+
+  logLevel: INFO
+  auditLog: true
+
+  # --- Proxy Mode (when backend=proxy) ---
+  proxy:
+    trustedIPs: ""  # REQUIRED in proxy mode — comma-separated
+    trustAll: false  # Opt-in to insecure default
+    userHeader: Remote-User
+    groupsHeader: Remote-Groups
+    emailHeader: Remote-Email
+    nameHeader: Remote-Name
+    groupPattern: ""
+    logoutUrl: ""  # REQUIRED in proxy mode — no default, must be explicitly set
+
+  # --- RBAC ---
+  rbac:
+    unknownMutationRole: ADMIN
+    restWriteRole: EDITOR
+
+  # --- LDAP (when backend=ldap) ---
+  ldap:
+    server: ""
+    baseDN: ""
+    bindDN: ""
+    bindPassword: ""
+    userFilter: "(uid={username})"
+    useTLS: false
+    caCert: ""
+    roleAttribute: ""
+    groupPattern: ""
+    timeout: 10
+
+# --- Dagster workspace (passed as CLI args) ---
+dagster:
+  workspace:
+    # Use either module or file
+    module: ""
+    file: ""
+  extraArgs: []
+  home: /data/dagster_home
+
+# --- Persistence for SQLite (when using SQLite backend) ---
+persistence:
+  enabled: true
+  size: 1Gi
+  accessMode: ReadWriteOnce
