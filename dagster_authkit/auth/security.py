@@ -141,9 +141,10 @@ class SecurityHardening:
             "Content-Security-Policy": (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline'; "  # Dagster needs inline scripts
-                "style-src 'self' 'unsafe-inline'; "  # Dagster needs inline styles
+                "worker-src 'self' blob:; " # Dagster graph layout uses blob: workers
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "  # Dagster needs inline styles
                 "img-src 'self' data:; "
-                "font-src 'self' data:; "
+                "font-src 'self' data: https://cdn.jsdelivr.net; "
                 "connect-src 'self';"
             ),
             # Adds Permissions-Policy (replaces Feature-Policy)

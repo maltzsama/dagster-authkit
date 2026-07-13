@@ -21,6 +21,7 @@ dist/
 poetry.lock
 Pipfile.lock
 pdm.lock
+uv.lock
 __pypackages__/
 
 # Testing and coverage
