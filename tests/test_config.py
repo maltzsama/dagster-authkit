@@ -169,6 +169,17 @@ class TestAuthConfigFromEnv:
         cfg = AuthConfig()
         assert cfg.ADMIN_PASSWORD == "secret123"
 
+    def test_admin_user_default(self):
+        """ADMIN_USER should default to 'admin'."""
+        cfg = AuthConfig()
+        assert cfg.ADMIN_USER == "admin"
+
+    def test_admin_user_from_env(self, monkeypatch):
+        """ADMIN_USER should be read from DAGSTER_AUTH_ADMIN_USER."""
+        monkeypatch.setenv("DAGSTER_AUTH_ADMIN_USER", "root")
+        cfg = AuthConfig()
+        assert cfg.ADMIN_USER == "root"
+
 
 class TestAuthConfigRepr:
     """Verifies safe string representation."""

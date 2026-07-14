@@ -63,6 +63,16 @@ class TestPeeweeAuthBackendInitialization:
         assert len(users) == 1
         UserTable.drop_table(safe=True)
 
+    def test_admin_bootstrap_custom_username(self, sql_config):
+        """When ADMIN_USER is set, the admin should use that username."""
+        sql_config["ADMIN_USER"] = "root"
+        sql_config["ADMIN_PASSWORD"] = "bootpass"
+        be = PeeweeAuthBackend(sql_config)
+        admin = be.get_user("root")
+        assert admin is not None
+        assert admin.role == Role.ADMIN
+        UserTable.drop_table(safe=True)
+
 
 class TestPeeweeAuthBackendUserManagement:
     """Verifies user CRUD operations."""

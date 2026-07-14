@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2026-07-14
+
+### Bug Fixes
+
+* **Bootstrap:** Admin username now configurable via `DAGSTER_AUTH_ADMIN_USER` (default: `admin`). Previously the username was hardcoded, making the documented `DAGSTER_AUTH_ADMIN_USER` env var non-functional.
+
+---
+
 ## [0.4.0] - 2026-07-13
 
 ### Major Changes

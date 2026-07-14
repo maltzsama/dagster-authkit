@@ -61,6 +61,7 @@ class AuthConfig:
             ``DAGSTER_AUTH_REST_WRITE_ROLE``       Default: ``EDITOR``
 
         **Bootstrap:**
+            ``DAGSTER_AUTH_ADMIN_USER``            Default: ``admin``. Admin username
             ``DAGSTER_AUTH_ADMIN_PASSWORD``        Auto-creates admin on first run
 
         **Logging:**
@@ -194,6 +195,7 @@ class AuthConfig:
         self.DAGSTER_AUTH_REST_WRITE_ROLE = raw_rest_role
 
         # Admin Bootstrap (Used by SQL Backend)
+        self.ADMIN_USER = os.getenv("DAGSTER_AUTH_ADMIN_USER", "admin")
         self.ADMIN_PASSWORD = os.getenv("DAGSTER_AUTH_ADMIN_PASSWORD", "")
 
         # Logging and Audit

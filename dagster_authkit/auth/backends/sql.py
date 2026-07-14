@@ -258,12 +258,13 @@ class PeeweeAuthBackend(AuthBackend):
     def _bootstrap_admin(self):
         """Auto-creates admin user if specified in configuration."""
         admin_pass = self.config.get("ADMIN_PASSWORD")
-        if admin_pass and not self.get_user("admin"):
+        admin_user = self.config.get("ADMIN_USER", "admin")
+        if admin_pass and not self.get_user(admin_user):
             self.add_user(
-                username="admin",
+                username=admin_user,
                 password=admin_pass,
                 role=Role.ADMIN,
                 full_name="System Administrator",
                 performed_by="bootstrap",
             )
-            logger.info("Bootstrap: Admin user 'admin' created via environment variable.")
+            logger.info("Bootstrap: Admin user '%s' created via environment variable.", admin_user)
