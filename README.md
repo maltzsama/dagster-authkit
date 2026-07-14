@@ -1,5 +1,12 @@
 # 🛡️ Dagster AuthKit
 
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Build Status](https://github.com/maltzsama/dagster-authkit/workflows/CI/badge.svg)](https://github.com/maltzsama/dagster-authkit/actions)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg?logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/Apache-2.0)
+[![Coverage](https://codecov.io/gh/maltzsama/dagster-authkit/branch/main/graph/badge.svg)](https://codecov.io/gh/maltzsama/dagster-authkit)
+[![PyPI Version](https://img.shields.io/pypi/v/dagster-authkit?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/dagster-authkit/)
+[![Downloads](https://img.shields.io/pypi/dm/dagster-authkit?logo=pypi&logoColor=white)](https://pypi.org/project/dagster-authkit/)
+
 **Community authentication wrapper for self-hosted Dagster OSS.**
 
 *Authentication, RBAC, and Audit logs for Dagster without touching internal code.*
