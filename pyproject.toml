@@ -74,7 +74,8 @@ dev = [
     "twine>=4.0.0",
     "build>=0.10.0", 
     "black>=26.1.0", 
-    "ruff>=0.14.14"
+    "ruff>=0.14.14",
+    "python-semantic-release>=9.0.0"
 ]
 
 # Install everything
@@ -108,3 +109,6 @@ target-version = ['py310', 'py311', 'py312']
 line-length = 100
 select = ["E", "F", "I", "N", "W"]
 ignore = ["E501"]
+
+[tool.semantic_release]
+version_variables = ["pyproject.toml:version"]
