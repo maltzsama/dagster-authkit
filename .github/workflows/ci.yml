@@ -32,7 +32,7 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv pip install --system -e '.[dev,all]'
+        run: uv pip install --system -e '.[dev,sqlite]'
 
       - name: Run linter (ruff)
         run: uv run ruff check . --exit-zero
