@@ -245,7 +245,7 @@ def render_403_page(user, path: str, method: str, reason: str) -> str:
     safe_method = html.escape(method, quote=True)
     safe_path = html.escape(path, quote=True)
     safe_reason = html.escape(reason, quote=True)
-    html = f"""
+    html_str = f"""
             <!DOCTYPE html>
             <html>
             <head>
@@ -288,8 +288,7 @@ def render_403_page(user, path: str, method: str, reason: str) -> str:
             </body>
             </html>
             """
-    return html
-
+    return html_str
 
 def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool) -> str:
     """
@@ -308,8 +307,7 @@ def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool
     Returns:
         String containing ``<style>`` and ``<script>`` blocks.
     """
-    html = f"""
-        <!-- Dagster AuthKit - Resilient UI Injection v1.0 -->
+    html_str = f"""
         <style>
             /* Geist Sans Typography */
             @import url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/style.css');
@@ -686,4 +684,4 @@ def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool
         }})();
         </script>
         """
-    return html
+    return html_str

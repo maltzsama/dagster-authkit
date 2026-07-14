@@ -91,3 +91,42 @@ class TestConvenienceFunctions:
         """list_available_backends should include 'dummy'."""
         backends = list_available_backends()
         assert "dummy" in backends
+
+
+class TestBackendRegistryEdgeCases:
+    """Verifies edge cases in the BackendRegistry."""
+
+    def test_get_backend_caches_instance(self):
+        """Multiple calls to get_backend should return the same cached instance."""
+        backend1 = BackendRegistry.get_backend("dummy", {})
+        backend2 = BackendRegistry.get_backend("dummy", {"OTHER": "config"})
+        assert backend1 is backend2
+
+    def test_get_backend_init_failure_raises(self, monkeypatch):
+        """If backend initialization fails, should raise RuntimeError."""
+        BackendRegistry.discover_backends()
+
+        def raiser(config):
+            raise ValueError("Init error")
+
+        monkeypatch.setitem(BackendRegistry._backends, "dummy", raiser)
+        # Reset instance cache so it tries to init again
+        BackendRegistry._instances.clear()
+
+        with pytest.raises(RuntimeError, match="Backend initialization failed"):
+            BackendRegistry.get_backend("dummy", {})
+
+    def test_list_backends_triggers_discovery(self):
+        """list_backends should trigger discovery if not yet initialized."""
+        BackendRegistry.reset()
+        assert not BackendRegistry._initialized
+        backends = BackendRegistry.list_backends()
+        assert len(backends) > 0
+        assert BackendRegistry._initialized
+
+    def test_reset_clears_instances(self):
+        """reset should clear cached instances too."""
+        BackendRegistry.get_backend("dummy", {})
+        assert len(BackendRegistry._instances) > 0
+        BackendRegistry.reset()
+        assert len(BackendRegistry._instances) == 0

@@ -191,3 +191,184 @@ class TestInMemoryRateLimiterOOM:
         # user_0 already exists — should accept
         count = limiter.record_attempt("user_0", window)
         assert count == 2  # second attempt
+
+    def test_reset_removes_from_tracking(self, limiter):
+        """reset() should remove the identifier, freeing a slot."""
+        limiter._MAX_TRACKED = 3
+        window = 300
+
+        limiter.record_attempt("user_a", window)
+        limiter.record_attempt("user_b", window)
+        limiter.record_attempt("user_c", window)
+
+        limiter.reset("user_a")
+        # Now user_a should count as 0 again
+        _, count = limiter.is_rate_limited("user_a", max_attempts=5, window_seconds=window)
+        assert count == 0
+
+    def test_is_rate_limited_cleans_window(self, limiter):
+        """Calling is_rate_limited should clean entries outside the window."""
+        limiter._MAX_TRACKED = 10
+        window = 1
+        limiter.record_attempt("user", window)
+        import time
+        time.sleep(1.1)
+        # Force cleanup check
+        limiter._last_cleanup = 0
+        _, count = limiter.is_rate_limited("user", max_attempts=5, window_seconds=window)
+        assert count == 0
+
+
+class TestRateLimiterOrchestrator:
+    """Verifies the RateLimiter facade with enabled/disabled modes."""
+
+    def test_disabled_mode(self):
+        """When disabled, rate limiter should never block."""
+        rl = RateLimiter(max_attempts=3, window_seconds=300, enabled=False)
+        for _ in range(10):
+            rl.record_attempt("user")
+        is_limited, count = rl.is_rate_limited("user")
+        assert is_limited is False
+        assert count == 0
+
+    def test_enabled_mode_blocks(self):
+        """When enabled, rate limiter should block after max_attempts."""
+        rl = RateLimiter(max_attempts=3, window_seconds=300, enabled=True)
+        for _ in range(3):
+            rl.record_attempt("user")
+        is_limited, _ = rl.is_rate_limited("user")
+        assert is_limited is True
+
+    def test_reset_when_disabled_no_error(self):
+        """Reset should not raise when disabled."""
+        rl = RateLimiter(enabled=False)
+        rl.reset("user")  # should not raise
+
+    def test_record_returns_zero_when_disabled(self):
+        """Record should return 0 when disabled."""
+        rl = RateLimiter(enabled=False)
+        assert rl.record_attempt("user") == 0
+
+    def test_check_and_record_disabled(self):
+        """check_and_record should never block when disabled."""
+        rl = RateLimiter(max_attempts=1, window_seconds=300, enabled=False)
+        for _ in range(20):
+            limited, count = rl.check_and_record("user")
+            assert limited is False
+            assert count == 0
+
+    def test_check_and_record_blocks(self):
+        """check_and_record should block after max_attempts."""
+        rl = RateLimiter(max_attempts=3, window_seconds=300, enabled=True)
+        for i in range(2):  # 2 attempts: not limited yet
+            limited, _ = rl.check_and_record("user")
+            assert limited is False
+        # 3rd attempt: check finds 2, records -> 3, returns 3 >= 3 = True
+        limited, _ = rl.check_and_record("user")
+        assert limited is True
+
+    def test_check_and_record_only_checks_when_disabled(self):
+        """When disabled, check_and_record should not record, just return not limited."""
+        rl = RateLimiter(max_attempts=1, window_seconds=300, enabled=False)
+        limited, count = rl.check_and_record("user")
+        assert limited is False
+        assert count == 0
+
+    def test_get_rate_limiter_singleton(self):
+        """get_rate_limiter should always return the same instance."""
+        rl1 = get_rate_limiter()
+        rl2 = get_rate_limiter()
+        assert rl1 is rl2
+
+    def test_record_login_attempt_disabled(self, monkeypatch):
+        """record_login_attempt should return 0 when rate limiter is disabled."""
+        monkeypatch.setattr(
+            "dagster_authkit.auth.rate_limiter._rate_limiter.enabled", False
+        )
+        assert record_login_attempt("user") == 0
+
+    def test_is_rate_limited_disabled(self, monkeypatch):
+        """is_rate_limited should return False when disabled."""
+        monkeypatch.setattr(
+            "dagster_authkit.auth.rate_limiter._rate_limiter.enabled", False
+        )
+        limited, count = is_rate_limited("user")
+        assert limited is False
+
+    def test_reset_rate_limit_disabled(self, monkeypatch):
+        """reset_rate_limit should not raise when disabled."""
+        monkeypatch.setattr(
+            "dagster_authkit.auth.rate_limiter._rate_limiter.enabled", False
+        )
+        reset_rate_limit("user")  # should not raise
+
+
+class TestRedisRateLimiter:
+    """Verifies the Redis-based rate limiter with mocked Redis."""
+
+    @pytest.fixture
+    def mock_redis_instance(self):
+        """Provide a clean MagicMock for each test."""
+        from unittest.mock import MagicMock
+        return MagicMock()
+
+    @pytest.fixture
+    def limiter(self, monkeypatch, mock_redis_instance):
+        """Returns a RedisRateLimiter with mocked Redis."""
+        import sys
+        from unittest.mock import MagicMock
+
+        mock_redis_module = MagicMock()
+        mock_redis_module.from_url = MagicMock(return_value=mock_redis_instance)
+        monkeypatch.setitem(sys.modules, "redis", mock_redis_module)
+        from dagster_authkit.auth.rate_limiter import RedisRateLimiter
+        return RedisRateLimiter(redis_url="redis://localhost:6379/0")
+
+    def test_is_rate_limited_under_limit(self, limiter, mock_redis_instance):
+        """Should not be limited when under the limit."""
+        mock_redis_instance.get.return_value = "2"
+        limited, count = limiter.is_rate_limited("user1", 5, 300)
+        assert limited is False
+        assert count == 2
+
+    def test_is_rate_limited_at_limit(self, limiter, mock_redis_instance):
+        """Should be limited when at the limit."""
+        mock_redis_instance.get.return_value = "5"
+        limited, count = limiter.is_rate_limited("user1", 5, 300)
+        assert limited is True
+
+    def test_is_rate_limited_no_key(self, limiter, mock_redis_instance):
+        """Should not be limited when no key exists."""
+        mock_redis_instance.get.return_value = None
+        limited, count = limiter.is_rate_limited("new_user", 5, 300)
+        assert limited is False
+        assert count == 0
+
+    def test_is_rate_limited_redis_error(self, limiter, mock_redis_instance):
+        """Should fail-closed (block) on Redis error."""
+        mock_redis_instance.get.side_effect = Exception("Connection lost")
+        limited, count = limiter.is_rate_limited("user1", 5, 300)
+        assert limited is True
+
+    def test_record_attempt(self, limiter, mock_redis_instance):
+        """record_attempt should return incremented count."""
+        mock_redis_instance.incr.return_value = 3
+        count = limiter.record_attempt("user1", 300)
+        assert count == 3
+        assert mock_redis_instance.expire.called
+
+    def test_record_attempt_redis_error(self, limiter, mock_redis_instance):
+        """Should return 0 on Redis error."""
+        mock_redis_instance.incr.side_effect = Exception("Connection lost")
+        count = limiter.record_attempt("user1", 300)
+        assert count == 0
+
+    def test_reset(self, limiter, mock_redis_instance):
+        """reset should delete the key."""
+        limiter.reset("user1")
+        assert mock_redis_instance.delete.called
+
+    def test_reset_redis_error(self, limiter, mock_redis_instance):
+        """reset should not raise on Redis error."""
+        mock_redis_instance.delete.side_effect = Exception("Connection lost")
+        limiter.reset("user1")  # should not raise
