@@ -18,7 +18,6 @@ from dagster_authkit.utils.logging import setup_logging
 
 # List of commands that should be handled by our internal management CLI
 MANAGEMENT_COMMANDS = [
-    "user",
     "init-db",
     "add-user",
     "list-users",
