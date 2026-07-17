@@ -139,7 +139,7 @@ async def process_login(request: Request) -> Response:
     csrf_token = str(form.get("csrf_token", ""))
     csrf_cookie = request.cookies.get("csrf_token", "")
     if not _validate_csrf_token(csrf_token, cookie=csrf_cookie):
-        logger.warning("CSRF validation failed for login attempt")
+        logger.warning("CSRF validation failed for login attempt", exc_info=True)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Invalid+request.", status_code=302
         )

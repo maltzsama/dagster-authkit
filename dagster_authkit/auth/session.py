@@ -190,7 +190,8 @@ class CookieBackend(SessionBackend):
         except ImportError as e:
             logger.error(
                 f"CookieBackend: Failed to import SQL backend for version getter: {e}. "
-                "Session revocation will be single-pod only."
+                "Session revocation will be single-pod only.",
+                exc_info=True,
             )
 
     def _current_version(self, username: str) -> Optional[int]:
@@ -219,7 +220,8 @@ class CookieBackend(SessionBackend):
             except Exception as e:
                 logger.error(
                     f"DB unavailable for session version of '{username}': {e}. "
-                    "Rejecting session (fail-closed)."
+                    "Rejecting session (fail-closed).",
+                    exc_info=True,
                 )
                 return None
 

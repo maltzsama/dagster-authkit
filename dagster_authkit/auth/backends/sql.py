@@ -81,7 +81,7 @@ class PeeweeAuthBackend(AuthBackend):
 
             logger.info(f"PeeweeAuthBackend: Initialized using {type(self.db).__name__}")
         except Exception as e:
-            logger.error(f"Failed to initialize SQL database: {e}")
+            logger.error(f"Failed to initialize SQL database: {e}", exc_info=True)
             raise
 
     def get_name(self) -> str:
@@ -161,7 +161,7 @@ class PeeweeAuthBackend(AuthBackend):
             log_audit_event("USER_CREATED", performed_by, target=username, role=role.name)
             return True
         except Exception as e:
-            logger.error(f"SQL Error adding user {username}: {e}")
+            logger.error(f"SQL Error adding user {username}: {e}", exc_info=True)
             return False
 
     def delete_user(self, username: str, performed_by: str = "system") -> bool:

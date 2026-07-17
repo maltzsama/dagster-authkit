@@ -330,7 +330,7 @@ class DagsterAuthMiddleware:
         try:
             return AuthUser.from_dict(user_data)
         except Exception as e:
-            logger.error(f"User deserialization failed: {e}")
+            logger.error(f"User deserialization failed: {e}", exc_info=True)
             return None
 
     # ================================================================
@@ -358,7 +358,7 @@ class DagsterAuthMiddleware:
         try:
             return AuthUser.from_dict(user_data)
         except Exception as e:
-            logger.error(f"User deserialization failed: {e}")
+            logger.error(f"User deserialization failed: {e}", exc_info=True)
             return None
 
     @staticmethod
