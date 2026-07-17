@@ -32,6 +32,9 @@ data:
   {{- if .Values.authkit.redisUrl }}
   DAGSTER_AUTH_REDIS_URL: {{ .Values.authkit.redisUrl | quote }}
   {{- end }}
+  {{- if .Values.authkit.metricsToken }}
+  DAGSTER_AUTH_METRICS_TOKEN: {{ .Values.authkit.metricsToken | quote }}
+  {{- end }}
   {{- if .Values.authkit.proxy.trustedIPs }}
   DAGSTER_AUTH_PROXY_TRUSTED_IPS: {{ .Values.authkit.proxy.trustedIPs | quote }}
   {{- end }}

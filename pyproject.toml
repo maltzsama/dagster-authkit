@@ -112,4 +112,8 @@ select = ["E", "F", "I", "N", "W", "TRY400", "LOG007"]
 ignore = ["E501"]
 
 [tool.semantic_release]
-version_variables = ["pyproject.toml:version"]
+version_variables = [
+    "pyproject.toml:version",
+    "helm/dagster-authkit/Chart.yaml:version",
+    "helm/dagster-authkit/Chart.yaml:appVersion",
+]

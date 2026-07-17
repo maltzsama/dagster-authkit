@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: dagster-authkit
   pullPolicy: IfNotPresent
-  tag: "0.4.0"
+  tag: ""  # Falls back to Chart.appVersion
 
 imagePullSecrets: []
 nameOverride: ""
@@ -64,6 +64,7 @@ authkit:
   existingSecret: ""  # Name of pre-created Secret (Vault, External Secrets, etc.)
   secretKey: ""  # Used only if existingSecret is empty
   adminPassword: ""
+  metricsToken: ""  # Optional — if set, required to access /auth/metrics
 
   sessionMaxAge: 86400
   cookieSecure: true

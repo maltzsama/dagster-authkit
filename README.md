@@ -165,6 +165,18 @@ export DAGSTER_AUTH_PROXY_LOGIN_URL=https://auth.yourcompany.com
 dagster-authkit -f your_pipeline.py -h 0.0.0.0 -p 3000
 ```
 
+### ☸️ Helm (Kubernetes)
+
+Deploy on Kubernetes via the Helm chart in [`helm/dagster-authkit/`](./helm/dagster-authkit/):
+
+```bash
+helm upgrade --install dagster-authkit ./helm/dagster-authkit \
+  --set authkit.secretKey="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
+  --set authkit.adminPassword="your-admin-password"
+```
+
+See [`values.yaml`](./helm/dagster-authkit/values.yaml) for all configuration options.
+
 ---
 
 ## 🔐 Roles (RBAC)
@@ -236,7 +248,7 @@ dagster-authkit list-permissions
 
 ### Next
 
-* 🔄 Helm chart for Kubernetes deployments
+* ☸️ Helm chart for Kubernetes deployments (preview — available in `helm/`)
 * 🔄 OIDC backend (beyond proxy mode)
 
 **What we will NOT do:**
