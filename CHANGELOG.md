@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.2] - 2026-07-17
+
+### Bug Fixes
+
+* **UI Injection (Starlette 1.x compat):** Fixed `TypeError: 'coroutine' object is not callable` when Dagster uses a sync `index_html_endpoint`. The patched handler now always awaits — previously the sync branch called `_inject_resilient_ui` (async) without `await`, returning an unawaited coroutine that Starlette could not invoke as a Response.
+* **Middleware State Access:** Fixed silent injection skip on Starlette >=1.3.1 where `request.state` is backed by a plain dict. Now checks both `request.scope["state"]` (dict) and `request.state` (State object) for the authenticated user.
+* **CSP Nonce Support:** Copied the `<script nonce="...">` from Dagster's existing scripts to injected blocks, fixing UI injection breakage on Dagster deployments with Content Security Policy nonces.
+
+---
+
 ## [0.4.1] - 2026-07-14
 
 ### Bug Fixes
