@@ -108,7 +108,7 @@ target-version = ['py310', 'py311', 'py312']
 
 [tool.ruff]
 line-length = 100
-select = ["E", "F", "I", "N", "W"]
+select = ["E", "F", "I", "N", "W", "TRY400", "LOG007"]
 ignore = ["E501"]
 
 [tool.semantic_release]
