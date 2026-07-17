@@ -15,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
 
+from dagster_authkit.api.health import track_login_attempt, track_session_created
 from dagster_authkit.auth.rate_limiter import (
     get_rate_limiter,
     reset_rate_limit,
@@ -140,6 +141,7 @@ async def process_login(request: Request) -> Response:
     csrf_cookie = request.cookies.get("csrf_token", "")
     if not _validate_csrf_token(csrf_token, cookie=csrf_cookie):
         logger.warning("CSRF validation failed for login attempt", exc_info=True)
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Invalid+request.", status_code=302
         )
@@ -155,6 +157,7 @@ async def process_login(request: Request) -> Response:
         total = max(user_attempts, ip_attempts)
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({total} attempts)")
         log_rate_limit_violation(username, client_ip, total)
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Too+many+attempts.", status_code=302
         )
@@ -167,6 +170,7 @@ async def process_login(request: Request) -> Response:
     except Exception as e:
         logger.error(f"Auth Backend Error: {e}")
         log_login_attempt(username, False, client_ip, "BACKEND_ERROR")
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=System+error.", status_code=302
         )
@@ -175,6 +179,7 @@ async def process_login(request: Request) -> Response:
     if not user:
         # Attempt already recorded by check_and_record above
         log_login_attempt(username, False, client_ip, "INVALID_CREDENTIALS")
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Invalid+credentials.", status_code=302
         )
@@ -183,8 +188,10 @@ async def process_login(request: Request) -> Response:
     reset_rate_limit(username)
     reset_rate_limit(ip_identifier)
     log_login_attempt(username, True, client_ip)
+    track_login_attempt(True, username)
 
     session_token = sessions.create(user.to_dict())
+    track_session_created()
 
     session_hash = hashlib.sha256(session_token.encode()).hexdigest()[:16]
     log_audit_event("SESSION_CREATED", username, session_id=session_hash, ip=client_ip)

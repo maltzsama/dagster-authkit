@@ -21,7 +21,12 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from dagster_authkit.api.health import health_endpoint, metrics_endpoint, track_rbac_decision
+from dagster_authkit.api.health import (
+    health_endpoint,
+    metrics_endpoint,
+    track_rbac_decision,
+    track_request_duration,
+)
 from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
@@ -303,7 +308,14 @@ class DagsterAuthMiddleware:
 
     async def _passthrough(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Pass the request to the inner app. send is already wrapped with security headers."""
-        await self.app(scope, receive, send)
+        import time
+        start = time.monotonic()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            duration = time.monotonic() - start
+            path = scope.get("path", "unknown")
+            track_request_duration(path, duration)
 
     # ================================================================
     # User extraction (HTTP)
