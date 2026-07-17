@@ -682,3 +682,70 @@ class TestSecurityHeaders:
         assert headers.get("X-Content-Type-Options") == "nosniff"
         assert headers.get("X-Frame-Options") == "DENY"
         assert "Content-Security-Policy" in headers
+
+
+# ---------------------------------------------------------------------------
+# N-03: XSS — user data escaped in injected JSON
+# ---------------------------------------------------------------------------
+
+class TestUserDataXssEscape:
+    """Verifies that HTML-special chars in user data are escaped before injection."""
+
+    @pytest.mark.asyncio
+    async def test_html_special_chars_in_full_name_are_escaped(self):
+        """full_name with HTML special chars must be escaped in injected JSON."""
+        from dagster_authkit.core import patch as patch_module
+
+        user = AuthUser(
+            username="testuser",
+            role=Role.VIEWER,
+            email="test@test.com",
+            full_name='<img src=x onerror=alert(1)>',
+        )
+        scope = _make_scope()
+        state = State()
+        state.user = user
+        scope["state"] = state
+
+        request = Request(scope)
+        original_backup = patch_module.original_index_html
+        patch_module.original_index_html = lambda self, req: _html_response(_MINIMAL_HTML)
+        try:
+            response = await patch_module._inject_resilient_ui(None, request)
+        finally:
+            patch_module.original_index_html = original_backup
+
+        body = response.body.decode()
+        # The raw <img> tag must NOT appear in the response
+        assert '<img src=x' not in body
+        # The HTML-escaped form should appear instead
+        assert '&lt;img src=x onerror=alert(1)&gt;' in body or '\\u003c' not in body
+
+    @pytest.mark.asyncio
+    async def test_xss_in_username_and_email_escaped(self):
+        """username and email with HTML special chars must be escaped."""
+        from dagster_authkit.core import patch as patch_module
+
+        user = AuthUser(
+            username='"><script>bad</script>',
+            role=Role.VIEWER,
+            email='evil@<a>test.com',
+            full_name='Normal Name',
+        )
+        scope = _make_scope()
+        state = State()
+        state.user = user
+        scope["state"] = state
+
+        request = Request(scope)
+        original_backup = patch_module.original_index_html
+        patch_module.original_index_html = lambda self, req: _html_response(_MINIMAL_HTML)
+        try:
+            response = await patch_module._inject_resilient_ui(None, request)
+        finally:
+            patch_module.original_index_html = original_backup
+
+        body = response.body.decode()
+        assert '<script>bad</script>' not in body
+        assert '&lt;script&gt;bad&lt;/script&gt;' in body
+        assert '&lt;a&gt;test.com' in body
