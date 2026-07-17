@@ -8,6 +8,7 @@ Covers:
 
 import os
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -57,6 +58,16 @@ class TestCookieBackend:
         token = backend.create(user_data)
         result = backend.validate(token)
         assert result is None
+
+    def test_validate_logs_warning_on_failure(self, backend):
+        """validate should log a warning with exc_info=True on failure."""
+        import dagster_authkit.auth.session as sess_mod
+        with patch.object(sess_mod.logger, "warning") as mock_warn:
+            result = backend.validate("garbage-token")
+            assert result is None
+            mock_warn.assert_called_once()
+            assert mock_warn.call_args[0][0] == "Session validation failed"
+            assert mock_warn.call_args[1].get("exc_info") is True
 
     def test_tokens_are_unique(self, backend, user_data):
         """Tokens with different data or versions should be unique.

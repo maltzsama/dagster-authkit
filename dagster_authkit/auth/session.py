@@ -257,6 +257,7 @@ class CookieBackend(SessionBackend):
 
             return data
         except Exception:
+            logger.warning("Session validation failed", exc_info=True)
             return None
 
     def revoke(self, token: str) -> bool:
