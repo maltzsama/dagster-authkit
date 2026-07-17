@@ -138,14 +138,16 @@ class TestMetricTrackingFunctions:
         # information leakage via /metrics and unbounded cardinality.
 
     def test_track_rbac_decision(self):
-        """RBAC decisions should be tracked with role and action."""
-        track_rbac_decision(True, "ADMIN", "launchRun")
+        """RBAC decisions should be tracked with status and role labels only."""
+        track_rbac_decision(True, "ADMIN")
         metrics = get_metrics_collector().get_metrics()
         counters = metrics["counters"]
         assert any(
             "auth_rbac_decisions_total" in k and "status=allowed" in k and "role=ADMIN" in k
             for k in counters
         )
+        # Action must NOT be a metric label (prevents unbounded cardinality)
+        assert not any("action=" in k for k in counters if "auth_rbac_decisions_total" in k)
 
     def test_track_session_created(self):
         """Session creation should increment the counter."""

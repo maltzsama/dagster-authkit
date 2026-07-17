@@ -255,7 +255,7 @@ class DagsterAuthMiddleware:
 
                     if required_role and not user.can(required_role):
                         self._log_denied(user, mutation_name, required_role)
-                        track_rbac_decision(False, user.role.name, mutation_name)
+                        track_rbac_decision(False, user.role.name)
                         response = self._generate_dagster_error_response(
                             user, mutation_name, required_role
                         )
@@ -263,7 +263,7 @@ class DagsterAuthMiddleware:
                         return
 
                     if required_role:
-                        track_rbac_decision(True, user.role.name, mutation_name)
+                        track_rbac_decision(True, user.role.name)
 
             # Rebuild receive with consumed body so downstream can read it
             async def _receive():

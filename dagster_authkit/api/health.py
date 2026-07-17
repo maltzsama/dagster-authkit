@@ -129,11 +129,14 @@ def track_session_created():
     _metrics.increment_counter("auth_sessions_created_total")
 
 
-def track_rbac_decision(allowed: bool, role: str, action: str):
-    """Tracks RBAC decision."""
+def track_rbac_decision(allowed: bool, role: str):
+    """Tracks RBAC decision.
+    Note: action is intentionally omitted from metric labels to prevent
+    unbounded label cardinality (memory DoS via arbitrary mutation names).
+    """
     status = "allowed" if allowed else "denied"
     _metrics.increment_counter(
-        "auth_rbac_decisions_total", {"status": status, "role": role, "action": action}
+        "auth_rbac_decisions_total", {"status": status, "role": role}
     )
 
 
