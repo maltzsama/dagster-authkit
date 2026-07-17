@@ -593,3 +593,92 @@ class TestGraphQLBatchFailClosed:
         assert mock_app_called, (
             "Empty batch must still passthrough to Dagster"
         )
+
+
+# ---------------------------------------------------------------------------
+# B-01: Security headers on all response paths
+# ---------------------------------------------------------------------------
+
+class TestSecurityHeaders:
+    """Verifies security headers are injected on all response paths."""
+
+    @staticmethod
+    def _get_header_dict(headers):
+        return {
+            k.decode("latin-1"): v.decode("latin-1")
+            for k, v in (headers or [])
+        }
+
+    @pytest.mark.asyncio
+    async def test_options_response_has_security_headers(self):
+        """OPTIONS requests must receive security headers."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+        from dagster_authkit.auth.backends.base import Role
+
+        sent_messages = []
+
+        async def mock_app(scope, receive, send):
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/html")],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"ok",
+            })
+
+        async def send_fn(message):
+            sent_messages.append(message)
+
+        scope = {
+            "type": "http",
+            "method": "OPTIONS",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [],
+            "server": ("localhost", 3000),
+            "client": ("127.0.0.1", 12345),
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        with patch("dagster_authkit.core.middleware.config") as mock_cfg:
+            mock_cfg.AUTH_BACKEND = "dummy"
+            mock_cfg.SESSION_COOKIE_NAME = "test_session"
+            mock_cfg.DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE = "EDITOR"
+            mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
+
+            middleware = DagsterAuthMiddleware(mock_app)
+
+            await middleware(scope, receive, send_fn)
+
+        assert len(sent_messages) >= 1
+        start_msg = sent_messages[0]
+        assert start_msg["type"] == "http.response.start"
+        headers = self._get_header_dict(start_msg.get("headers", []))
+        assert headers.get("X-Content-Type-Options") == "nosniff"
+        assert headers.get("X-Frame-Options") == "DENY"
+
+    @pytest.mark.asyncio
+    async def test_inject_headers_send_wrapper(self):
+        """_inject_headers_send must add security headers to any response."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+
+        captured = []
+
+        async def mock_send(message):
+            captured.append(message)
+
+        wrapped_send = DagsterAuthMiddleware._inject_headers_send(mock_send)
+        await wrapped_send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"content-type", b"text/html")],
+        })
+
+        headers = self._get_header_dict(captured[0].get("headers", []))
+        assert headers.get("X-Content-Type-Options") == "nosniff"
+        assert headers.get("X-Frame-Options") == "DENY"
+        assert "Content-Security-Policy" in headers

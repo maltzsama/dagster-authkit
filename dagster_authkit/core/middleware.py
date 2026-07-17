@@ -142,6 +142,7 @@ class DagsterAuthMiddleware:
     # ================================================================
 
     async def _handle_http(self, scope: Scope, receive: Receive, send: Send) -> None:
+        send = self._inject_headers_send(send)
         request = Request(scope, receive)
         path = request.url.path
         method = request.method
@@ -301,21 +302,8 @@ class DagsterAuthMiddleware:
         await self._passthrough(scope, downstream_receive, send)
 
     async def _passthrough(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Pass the request to the inner app, injecting security headers on the response."""
-
-        async def _send(message):
-            if message["type"] == "http.response.start":
-                headers = dict(
-                    (k.decode("latin-1"), v.decode("latin-1"))
-                    for k, v in message.get("headers", [])
-                )
-                headers.update(SecurityHardening.get_security_headers())
-                message["headers"] = [
-                    (k.encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
-                ]
-            await send(message)
-
-        await self.app(scope, receive, _send)
+        """Pass the request to the inner app. send is already wrapped with security headers."""
+        await self.app(scope, receive, send)
 
     # ================================================================
     # User extraction (HTTP)
@@ -458,6 +446,24 @@ class DagsterAuthMiddleware:
             "errors": [{"message": f"Access Denied: {role.name} required", "path": [mutation]}],
         }
         return Response(content=json.dumps(payload), status_code=200, media_type="application/json")
+
+    @staticmethod
+    def _inject_headers_send(send: Send) -> Send:
+        """Wrap an ASGI send callable to inject security headers on responses."""
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                headers = dict(
+                    (k.decode("latin-1"), v.decode("latin-1"))
+                    for k, v in message.get("headers", [])
+                )
+                headers.update(SecurityHardening.get_security_headers())
+                message["headers"] = [
+                    (k.encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
+                ]
+            await send(message)
+
+        return _send
 
     @staticmethod
     def _forbidden_html_response(user: AuthUser, path: str, method: str, reason: str) -> Response:
