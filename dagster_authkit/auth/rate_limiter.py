@@ -54,6 +54,29 @@ class RateLimiterBackend(ABC):
         pass
 
     @abstractmethod
+    def check_and_record(
+        self, identifier: str, max_attempts: int, window_seconds: int
+    ) -> Tuple[bool, int]:
+        """
+        Atomically check if rate limited and record an attempt.
+
+        Eliminates the TOCTOU race between is_rate_limited() and
+        record_attempt() when called separately.
+
+        Args:
+            identifier: Username or IP address
+            max_attempts: Maximum attempts allowed
+            window_seconds: Time window in seconds
+
+        Returns:
+            Tuple[bool, int]: (is_limited, attempts_count)
+            Unlike check_and_record on the facade, this does NOT skip
+            recording when already limited — the atomic operation records
+            and checks in one step, returning the post-recording state.
+        """
+        pass
+
+    @abstractmethod
     def reset(self, identifier: str) -> None:
         """
         Reset attempts for identifier (after successful login).
@@ -133,6 +156,39 @@ class InMemoryRateLimiter(RateLimiterBackend):
             is_limited = attempts_count >= max_attempts
 
             return is_limited, attempts_count
+
+    def check_and_record(
+        self, identifier: str, max_attempts: int, window_seconds: int
+    ) -> Tuple[bool, int]:
+        """Atomically check and record an attempt. Holds the lock once."""
+        now = time.time()
+        cutoff = now - window_seconds
+
+        with self._lock:
+            recent = [ts for ts in self._attempts.get(identifier, []) if ts > cutoff]
+            attempts_count = len(recent)
+
+            if attempts_count >= max_attempts:
+                return True, attempts_count
+
+            # OOM prevention
+            if len(self._attempts) >= self._MAX_TRACKED and identifier not in self._attempts:
+                self._maybe_prune(window_seconds)
+                if len(self._attempts) >= self._MAX_TRACKED:
+                    logger.warning(
+                        f"Rate limiter at capacity ({self._MAX_TRACKED} tracked). "
+                        "Rejecting new identifier to prevent OOM."
+                    )
+                    return True, self._MAX_TRACKED
+
+            self._attempts[identifier].append(now)
+            new_recent = [ts for ts in self._attempts[identifier] if ts > cutoff]
+            if not new_recent:
+                del self._attempts[identifier]
+                return False, 0
+            self._attempts[identifier] = new_recent
+            new_count = len(new_recent)
+            return new_count >= max_attempts, new_count
 
     def record_attempt(self, identifier: str, window_seconds: int) -> int:
         """Record failed attempt."""
@@ -238,6 +294,43 @@ class RedisRateLimiter(RateLimiterBackend):
             # Legitimate users with an existing session continue unaffected.
             return True, max_attempts
 
+    def check_and_record(
+        self, identifier: str, max_attempts: int, window_seconds: int
+    ) -> Tuple[bool, int]:
+        """Atomically check and record via Lua script."""
+        key = f"ratelimit:{identifier}"
+        script = """
+        local key = KEYS[1]
+        local max_attempts = tonumber(ARGV[1])
+        local window = tonumber(ARGV[2])
+        local count = redis.call('GET', key)
+        if count and tonumber(count) >= max_attempts then
+            return {1, count}
+        end
+        local new_count = redis.call('INCR', key)
+        redis.call('EXPIRE', key, window, 'NX')
+        if tonumber(new_count) >= max_attempts then
+            return {1, new_count}
+        end
+        return {0, new_count}
+        """
+
+        try:
+            limited, count = self.redis.eval(script, 1, key, str(max_attempts), str(window_seconds))
+            limited = bool(limited)
+            count = int(count)
+
+            if limited:
+                logger.warning(
+                    f"Rate limit triggered for '{identifier}': "
+                    f"{count}/{max_attempts} attempts"
+                )
+
+            return limited, count
+        except Exception as e:
+            logger.error(f"Redis rate limit check_and_record failed: {e}")
+            return True, max_attempts
+
     def record_attempt(self, identifier: str, window_seconds: int) -> int:
         key = f"ratelimit:{identifier}"
 
@@ -321,27 +414,23 @@ class RateLimiter:
 
     def check_and_record(self, identifier: str) -> Tuple[bool, int]:
         """
-        Atomically record a login attempt and check if rate limited.
+        Atomically check if rate limited and record an attempt.
 
-        Eliminates the TOCTOU race condition between is_rate_limited() and
-        record_attempt() that exists when they're called separately.
+        Delegates to the backend's atomic check_and_record, which
+        eliminates the TOCTOU race between is_rate_limited() and
+        record_attempt() when called separately.
 
         Returns:
             Tuple[bool, int]: (is_limited, attempts_count)
-            If is_limited is True, the attempt was NOT recorded
-            (the user was already over the limit).
+            If is_limited is True, the attempt was recorded but
+            the user exceeded the limit.
         """
         if not self.enabled:
             return False, 0
 
-        # Check first — if already limited, don't record
-        is_limited, count = self.is_rate_limited(identifier)
-        if is_limited:
-            return True, count
-
-        # Not yet limited, record the attempt atomically
-        new_count = self.backend.record_attempt(identifier, self.window_seconds)
-        return new_count >= self.max_attempts, new_count
+        return self.backend.check_and_record(
+            identifier, self.max_attempts, self.window_seconds
+        )
 
     def record_attempt(self, identifier: str) -> int:
         """
