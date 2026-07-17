@@ -266,18 +266,20 @@ class LDAPAuthBackend(AuthBackend):
         """Fetch attributes using raw response from SAFE_SYNC tuple.
         If existing_conn is provided, the caller is responsible for cleanup.
         Otherwise, a new connection is created and properly cleaned up."""
-        try:
-            from ldap3 import Connection, SAFE_SYNC
+        from ldap3 import Connection, SAFE_SYNC
 
-            owns_connection = existing_conn is None
-            conn = existing_conn or Connection(
-                self.server,
-                user=self.bind_dn,
-                password=self.bind_password,
-                client_strategy=SAFE_SYNC,
-                auto_bind=True,
-                receive_timeout=self._get_timeout(),
-            )
+        owns_connection = existing_conn is None
+        conn = existing_conn
+        try:
+            if conn is None:
+                conn = Connection(
+                    self.server,
+                    user=self.bind_dn,
+                    password=self.bind_password,
+                    client_strategy=SAFE_SYNC,
+                    auto_bind=True,
+                    receive_timeout=self._get_timeout(),
+                )
 
             attrs_to_fetch = ["cn", "displayName", "mail", "memberOf"]
             if self.role_attribute:
@@ -307,6 +309,9 @@ class LDAPAuthBackend(AuthBackend):
         except Exception as e:
             logger.error(f"LDAP: Error fetching attributes for {user_dn}: {e}")
             return {}
+        finally:
+            if owns_connection and conn is not None:
+                conn.unbind()
 
     def _determine_role(self, user_dn: str, attrs: Dict[str, List[str]], conn=None) -> Role:
         """
