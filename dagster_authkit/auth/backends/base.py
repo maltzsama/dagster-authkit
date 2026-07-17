@@ -53,6 +53,13 @@ class RolePermissions:
     - VIEWER can only read
     """
 
+    # Unrestricted — allowed for all roles (e.g., telemetry)
+    UNRESTRICTED_MUTATIONS: Set[str] = frozenset(
+        {
+            "logTelemetry",
+        }
+    )
+
     # LAUNCHER (20) - Execution Operations
     LAUNCHER_MUTATIONS: Set[str] = frozenset(
         {
@@ -145,6 +152,9 @@ class RolePermissions:
                 return default_role
             return Role.ADMIN
 
+        if mutation_name in cls.UNRESTRICTED_MUTATIONS:
+            return None
+
         if mutation_name in cls.LAUNCHER_MUTATIONS:
             return Role.LAUNCHER
         elif mutation_name in cls.EDITOR_MUTATIONS:
@@ -154,13 +164,16 @@ class RolePermissions:
         return default_role  # No restriction if no default_role configured
 
     @classmethod
-    def can_execute(cls, user_role: Role, mutation_name: str) -> bool:
+    def can_execute(cls, user_role: Role, mutation_name: str,
+                    default_role: Role = Role.ADMIN) -> bool:
         """
         Check if a role can execute a mutation (respects role hierarchy).
 
         Args:
             user_role:     User's role.
             mutation_name: Name of the GraphQL mutation.
+            default_role:  Default role for unknown mutations
+                           (default: ADMIN — deny-by-default).
 
         Returns:
             ``True`` if the user can execute, ``False`` otherwise.
@@ -172,7 +185,7 @@ class RolePermissions:
             >>> RolePermissions.can_execute(Role.VIEWER, "launchRun")
             False
         """
-        required_role = cls.get_required_role(mutation_name)
+        required_role = cls.get_required_role(mutation_name, default_role)
         if required_role is None:
             return True  # No restriction
         return user_role >= required_role

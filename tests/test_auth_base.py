@@ -125,9 +125,9 @@ class TestRolePermissions:
     def test_can_execute_unknown_with_default_admin(self):
         """VIEWER should be blocked from unknown mutations when default is ADMIN."""
         assert (
-            RolePermissions.can_execute(Role.VIEWER, "newDagsterMutation") is True
-        )  # no default set on can_execute
-        # But get_required_role with default blocks:
+            RolePermissions.can_execute(Role.VIEWER, "newDagsterMutation") is False
+        )  # default_role=ADMIN denies unknown mutations
+        assert RolePermissions.can_execute(Role.ADMIN, "newDagsterMutation") is True
         assert RolePermissions.get_required_role("newDagsterMutation", Role.ADMIN) == Role.ADMIN
 
     def test_list_permissions_viewer(self):
