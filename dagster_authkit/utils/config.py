@@ -204,6 +204,7 @@ class AuthConfig:
         # Logging and Audit
         self.LOG_LEVEL = os.getenv("DAGSTER_AUTH_LOG_LEVEL", "INFO")
         self.AUDIT_LOG_ENABLED = os.getenv("DAGSTER_AUTH_AUDIT_LOG", "true").lower() == "true"
+        self.METRICS_TOKEN = os.getenv("DAGSTER_AUTH_METRICS_TOKEN") or None
 
         # Validate critical settings
         self._validate()

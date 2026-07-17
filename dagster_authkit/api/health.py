@@ -253,12 +253,20 @@ async def metrics_endpoint(request):
     - Histograms (request duration with min/max/avg)
     - Uptime in seconds
 
-    Note:
-        In production, restrict access to this endpoint via IP allowlist
-        or admin token. For distributed deployments, replace with Prometheus/StatsD.
+    If ``DAGSTER_AUTH_METRICS_TOKEN`` is configured, the request must
+    include a ``?token=...`` query parameter or ``X-Metrics-Token``
+    header matching that value.
 
     Returns:
         ``JSONResponse`` with all collected metrics.
     """
+    from dagster_authkit.utils.config import config
+
+    if config.METRICS_TOKEN:
+        from dagster_authkit.auth.security import SecurityHardening
+        token = request.query_params.get("token") or request.headers.get("x-metrics-token", "")
+        if not SecurityHardening.constant_time_compare(token, config.METRICS_TOKEN):
+            return JSONResponse({"error": "Forbidden"}, status_code=403)
+
     metrics = _metrics.get_metrics()
     return JSONResponse(metrics)
