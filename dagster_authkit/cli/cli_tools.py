@@ -182,12 +182,10 @@ def list_users_command(args):
     print("-" * 70)
 
     for u in users:
-        # Resolve role name from value
-        role_name = (
-            Role(u.role_value).name
-            if u.role_value in [r.value for r in Role]
-            else str(u.role_value)
-        )
+        try:
+            role_name = Role(u.role_value).name
+        except ValueError:
+            role_name = str(u.role_value)
         status = "Active" if u.is_active else "Disabled"
         print(f"{u.username:<20} {role_name:<12} {status:<10} {u.full_name or 'N/A':<25}")
 
@@ -263,8 +261,8 @@ def change_role_command(args):
     role_name = args.new_role.upper()
 
     try:
-        new_role = Role.from_string(role_name)
-    except ValueError:
+        new_role = Role[role_name]
+    except KeyError:
         print(f"❌ Invalid role: {role_name}. Valid roles: ADMIN, EDITOR, LAUNCHER, VIEWER")
         return 1
 
