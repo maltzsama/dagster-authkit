@@ -480,11 +480,12 @@ class RateLimiter:
 # ========================================
 
 _rate_limiter: Optional[RateLimiter] = None
+_rate_limiter_lock: threading.Lock = threading.Lock()
 
 
 def get_rate_limiter() -> RateLimiter:
     """
-    Get rate limiter singleton.
+    Get rate limiter singleton (thread-safe with double-checked locking).
 
     Returns:
         Global RateLimiter instance
@@ -492,14 +493,16 @@ def get_rate_limiter() -> RateLimiter:
     global _rate_limiter
 
     if _rate_limiter is None:
-        from dagster_authkit.utils.config import config
+        with _rate_limiter_lock:
+            if _rate_limiter is None:
+                from dagster_authkit.utils.config import config
 
-        _rate_limiter = RateLimiter(
-            max_attempts=config.RATE_LIMIT_MAX_ATTEMPTS,
-            window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
-            enabled=config.RATE_LIMIT_ENABLED,
-            redis_url=getattr(config, "REDIS_URL", None),
-        )
+                _rate_limiter = RateLimiter(
+                    max_attempts=config.RATE_LIMIT_MAX_ATTEMPTS,
+                    window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
+                    enabled=config.RATE_LIMIT_ENABLED,
+                    redis_url=getattr(config, "REDIS_URL", None),
+                )
 
     return _rate_limiter
 
