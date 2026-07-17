@@ -42,10 +42,16 @@ class UserTable(Model):
 # --- Backend Implementation ---
 
 
+# Dummy bcrypt hash (cost 12) used to equalize authentication timing
+# when the user does not exist, preventing username enumeration via
+# timing side-channel.
+_DUMMY_BCRYPT_HASH = "$2b$12$CvDWkgholgbRFh0fo3UTVe0lNcgnh.ZRdzvRMsWAD0mGFrSjDOdw2"
+
+
 class PeeweeAuthBackend(AuthBackend):
     """
-    Identity backend using Peewee ORM.
-    Handles authentication, user management, and security events.
+    Peewee-based auth backend supporting SQLite, PostgreSQL, and MySQL.
+    Automatically detects and handles legacy _meta.database for backward compat.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -69,7 +75,7 @@ class PeeweeAuthBackend(AuthBackend):
 
         try:
             self.db = connect(db_url)
-            UserTable._meta.database = self.db
+            self.db.bind([UserTable], bind_refs=False, bind_backrefs=False)
 
             # Idempotent table creation
             self.db.create_tables([UserTable])
@@ -115,7 +121,9 @@ class PeeweeAuthBackend(AuthBackend):
                     }
                 )
         except DoesNotExist:
-            pass
+            # Constant-time bcrypt verify against a dummy hash to prevent
+            # username enumeration via timing side-channel.
+            SecurityHardening.verify_password(password, _DUMMY_BCRYPT_HASH)
 
         return None
 
