@@ -219,7 +219,13 @@ def verify_patches() -> bool:
     try:
         import dagster_webserver.webserver as webserver_module
 
-        return getattr(webserver_module.DagsterWebserver, "_authkit_patched", False)
+        endpoint = getattr(webserver_module.DagsterWebserver, "index_html_endpoint", None)
+        if endpoint is None:
+            return False
+        return (
+            getattr(webserver_module.DagsterWebserver, "_authkit_patched", False)
+            and endpoint.__name__ == "patched_index_html"
+        )
     except Exception as e:
-        logger.error(f"Patch verification failed: {e}")
+        logger.error(f"Patch verification failed: {e}", exc_info=True)
         return False
