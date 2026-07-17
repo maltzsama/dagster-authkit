@@ -16,6 +16,7 @@ import json
 import logging
 from typing import Optional
 
+from starlette.datastructures import State
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -271,11 +272,19 @@ class DagsterAuthMiddleware:
             await response(scope, receive, send)
             return
 
-        # Store user in scope for downstream handlers (e.g., UI injection)
+        # Store user in scope for downstream handlers (e.g., UI injection).
+        # Use a Starlette State object (not a plain dict) so that attribute
+        # access via request.state.user works correctly in Starlette 1.3.1+,
+        # where request.state returns scope["state"] directly.
         scope = dict(scope)
-        if "state" not in scope:
-            scope["state"] = {}
-        scope["state"]["user"] = user
+        existing_state = scope.get("state")
+        if not isinstance(existing_state, State):
+            new_state = State()
+            if isinstance(existing_state, dict):
+                for k, v in existing_state.items():
+                    setattr(new_state, k, v)
+            scope["state"] = new_state
+        scope["state"].user = user
 
         await self._passthrough(scope, downstream_receive, send)
 

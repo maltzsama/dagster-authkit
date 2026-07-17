@@ -4,7 +4,7 @@ dagster-authkit
 Production-ready authentication and UI orchestration for Dagster OSS.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.2"
 
 from .auth.backends.base import AuthBackend
 from .core.registry import get_backend, list_available_backends
