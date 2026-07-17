@@ -429,3 +429,167 @@ class TestMiddlewareStateAlignment:
         assert captured_scope["state"].user is user, (
             "scope['state'].user must be the AuthUser instance"
         )
+
+
+# ---------------------------------------------------------------------------
+# N-01: RBAC fail-open em payload GraphQL em lote malformado
+# ---------------------------------------------------------------------------
+
+class TestGraphQLBatchFailClosed:
+    """Verifica que batch malformado retorna 400 em vez de fazer passthrough."""
+
+    @pytest.mark.asyncio
+    async def test_non_dict_item_in_batch_returns_400(self):
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+        from dagster_authkit.auth.backends.base import AuthUser, Role
+
+        sent_messages: list = []
+        mock_app_called = False
+
+        async def mock_app(scope, receive, send):
+            nonlocal mock_app_called
+            mock_app_called = True
+
+        body = json.dumps([
+            {"query": "mutation { launchRun(input: {}) }"},
+            123,
+        ]).encode("utf-8")
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send_fn(message):
+            sent_messages.append(message)
+
+        user = AuthUser(
+            username="viewer",
+            role=Role.VIEWER,
+            email="viewer@localhost",
+            full_name="Viewer User",
+        )
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [
+                (b"remote-user", b"viewer"),
+                (b"remote-groups", b""),
+                (b"remote-email", b"viewer@localhost"),
+                (b"remote-name", b"Viewer User"),
+                (b"content-type", b"application/json"),
+            ],
+            "server": ("localhost", 3000),
+            "client": ("127.0.0.1", 12345),
+        }
+
+        with patch("dagster_authkit.core.middleware.config") as mock_cfg:
+            mock_cfg.AUTH_BACKEND = "proxy"
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUST_ALL = True
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUSTED_IPS = None
+            mock_cfg.SESSION_COOKIE_NAME = "test_session"
+            mock_cfg.DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE = "EDITOR"
+            mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
+
+            middleware = DagsterAuthMiddleware.__new__(DagsterAuthMiddleware)
+            middleware.app = mock_app
+            middleware.is_proxy_mode = True
+            middleware._unknown_mutation_role = Role.EDITOR
+            middleware._rest_write_role = Role.EDITOR
+
+            proxy_backend_mock = MagicMock()
+            proxy_backend_mock.get_user_from_headers.return_value = user
+            middleware.proxy_backend = proxy_backend_mock
+
+            with patch.object(middleware, "_is_request_from_trusted_proxy", return_value=True):
+                await middleware(scope, receive, send_fn)
+
+        assert not mock_app_called, (
+            "Malformed batch must NOT passthrough to Dagster"
+        )
+
+        assert len(sent_messages) >= 2, (
+            f"Expected >=2 response messages, got {len(sent_messages)}"
+        )
+        start_msg = sent_messages[0]
+        assert start_msg["type"] == "http.response.start", (
+            f"First message should be http.response.start, got {start_msg['type']}"
+        )
+        assert start_msg["status"] == 400, (
+            f"Expected 400 for malformed batch, got {start_msg['status']}"
+        )
+
+        body_msg = sent_messages[1]
+        error_body = body_msg.get("body", b"")
+        assert b"Invalid GraphQL request format" in error_body, (
+            "Response must contain error message about invalid format"
+        )
+
+    @pytest.mark.asyncio
+    async def test_empty_batch_still_passthrough(self):
+        """Empty array [] should still passthrough (regression guard)."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+        from dagster_authkit.auth.backends.base import AuthUser, Role
+
+        mock_app_called = False
+
+        async def mock_app(scope, receive, send):
+            nonlocal mock_app_called
+            mock_app_called = True
+
+        body = json.dumps([]).encode("utf-8")
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send_fn(message):
+            pass
+
+        user = AuthUser(
+            username="admin",
+            role=Role.ADMIN,
+            email="admin@localhost",
+            full_name="System Administrator",
+        )
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [
+                (b"remote-user", b"admin"),
+                (b"remote-groups", b""),
+                (b"remote-email", b"admin@localhost"),
+                (b"remote-name", b"System Administrator"),
+                (b"content-type", b"application/json"),
+            ],
+            "server": ("localhost", 3000),
+            "client": ("127.0.0.1", 12345),
+        }
+
+        with patch("dagster_authkit.core.middleware.config") as mock_cfg:
+            mock_cfg.AUTH_BACKEND = "proxy"
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUST_ALL = True
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUSTED_IPS = None
+            mock_cfg.SESSION_COOKIE_NAME = "test_session"
+            mock_cfg.DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE = "EDITOR"
+            mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
+
+            middleware = DagsterAuthMiddleware.__new__(DagsterAuthMiddleware)
+            middleware.app = mock_app
+            middleware.is_proxy_mode = True
+            middleware._unknown_mutation_role = Role.EDITOR
+            middleware._rest_write_role = Role.EDITOR
+
+            proxy_backend_mock = MagicMock()
+            proxy_backend_mock.get_user_from_headers.return_value = user
+            middleware.proxy_backend = proxy_backend_mock
+
+            with patch.object(middleware, "_is_request_from_trusted_proxy", return_value=True):
+                await middleware(scope, receive, send_fn)
+
+        assert mock_app_called, (
+            "Empty batch must still passthrough to Dagster"
+        )

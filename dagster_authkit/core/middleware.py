@@ -212,6 +212,18 @@ class DagsterAuthMiddleware:
             graphql_data = self._parse_json(body)
             queries = self._normalize_graphql_items(graphql_data)
 
+            if not queries and graphql_data:
+                logger.warning(
+                    f"Rejected GraphQL batch with invalid items from {user.username}"
+                )
+                response = Response(
+                    content='{"errors":[{"message":"Invalid GraphQL request format"}]}',
+                    status_code=400,
+                    media_type="application/json",
+                )
+                await response(scope, receive, send)
+                return
+
             for g_item in queries:
                 query_str = g_item.get("query", "")
                 operation_name = g_item.get("operationName") or None
