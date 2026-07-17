@@ -403,6 +403,12 @@ class LDAPAuthBackend(AuthBackend):
             logger.error(f"LDAP: Manual group search failed: {e}", exc_info=True)
             return []
 
+    @staticmethod
+    def _first_value(attrs: Dict[str, list], key: str, default: str = "") -> str:
+        """Safely extract the first value from an LDAP attribute list."""
+        values = attrs.get(key, [])
+        return str(values[0]) if values else default
+
     def list_users(self) -> List[AuthUser]:
         """Iterate through raw response to list users."""
         try:
@@ -426,15 +432,15 @@ class LDAPAuthBackend(AuthBackend):
             if status and response:
                 for entry in response:
                     raw_attrs = entry.get("attributes", {})
-                    username = raw_attrs.get("cn", ["unknown"])[0]
+                    username = self._first_value(raw_attrs, "cn", "unknown")
                     role = self._determine_role(entry["dn"], raw_attrs)
 
                     users.append(
                         AuthUser(
                             username=username,
                             role=role,
-                            email=raw_attrs.get("mail", [""])[0],
-                            full_name=raw_attrs.get("displayName", [username])[0],
+                            email=self._first_value(raw_attrs, "mail"),
+                            full_name=self._first_value(raw_attrs, "displayName", username),
                         )
                     )
 
