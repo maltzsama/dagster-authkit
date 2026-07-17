@@ -229,6 +229,49 @@ class TestCookieBackendVersioning:
         assert result is None
 
 
+class TestCookieBackendRevokeCap:
+    """Verifies that _MAX_REVOKED prevents OOM from adversarial revocations."""
+
+    @pytest.fixture
+    def backend(self):
+        return CookieBackend(secret_key="test-secret-key-for-tests", max_age=5)
+
+    def test_revoke_ok_when_below_capacity(self, backend):
+        backend._MAX_REVOKED = 3
+        assert backend.revoke("token-1") is True
+        assert backend.revoke("token-2") is True
+        assert len(backend._revoked) == 2
+
+    def test_revoke_false_when_at_capacity(self, backend):
+        backend._MAX_REVOKED = 2
+        backend.revoke("token-1")
+        backend.revoke("token-2")
+        assert backend.revoke("token-3") is False
+        assert len(backend._revoked) == 2
+
+    def test_revoke_logs_warning_at_capacity(self, backend):
+        import dagster_authkit.auth.session as sess_mod
+        backend._MAX_REVOKED = 1
+        backend.revoke("token-1")
+        with patch.object(sess_mod.logger, "warning") as mock_warn:
+            backend.revoke("token-2")
+            mock_warn.assert_called_once()
+            msg = mock_warn.call_args[0][0]
+            assert "capacity" in msg.lower()
+            assert "_MAX_REVOKED" in msg
+
+    def test_revoke_rejects_when_capacity_but_prunes_expired(self, backend):
+        backend._MAX_REVOKED = 2
+        backend._revoked = {
+            "stale": 0.0,           # already expired
+            "fresh": 9999999999.0,  # still valid
+        }
+        result = backend.revoke("new-token")
+        assert result is True
+        assert "stale" not in backend._revoked
+        assert len(backend._revoked) == 2
+
+
 class TestRedisBackend:
     """Verifies the Redis-based session backend with mocked Redis."""
 
