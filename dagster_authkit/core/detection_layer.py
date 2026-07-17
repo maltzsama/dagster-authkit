@@ -125,8 +125,10 @@ def verify_dagster_api_compatibility() -> Tuple[bool, Optional[str]]:
     try:
         from starlette.middleware import Middleware
 
-        # Try to instantiate an empty middleware to verify API works
-        test_middleware = Middleware(lambda app: app)
+        # Verify the Middleware constructor accepts the expected signature
+        mw = Middleware(lambda app: app)
+        if mw.func is None:
+            return False, "Starlette Middleware constructor returned unexpected type"
     except Exception as e:
         return False, f"Starlette middleware API incompatible: {e}"
 

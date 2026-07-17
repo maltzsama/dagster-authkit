@@ -107,7 +107,8 @@ class GraphQLMutationAnalyzer:
         return mutations
 
     @staticmethod
-    def _collect_field_names(selection, mutations: Set[str], fragments: dict):
+    def _collect_field_names(selection, mutations: Set[str], fragments: dict,
+                              _visited_fragments: Optional[Set[str]] = None):
         """
         Recursively collect field names from selections, traversing fragments.
 
@@ -115,23 +116,30 @@ class GraphQLMutationAnalyzer:
         - FieldNode: direct mutation field
         - FragmentSpreadNode: reference to a named fragment
         - InlineFragmentNode: inline fragment with nested selections
+
+        Uses _visited_fragments to prevent infinite recursion from
+        circular fragment spreads.
         """
+        if _visited_fragments is None:
+            _visited_fragments = set()
+
         if isinstance(selection, FieldNode):
             mutations.add(selection.name.value)
 
         elif isinstance(selection, FragmentSpreadNode):
             fragment = fragments.get(selection.name.value)
-            if fragment:
+            if fragment and selection.name.value not in _visited_fragments:
+                _visited_fragments.add(selection.name.value)
                 for nested_selection in fragment.selection_set.selections:
                     GraphQLMutationAnalyzer._collect_field_names(
-                        nested_selection, mutations, fragments
+                        nested_selection, mutations, fragments, _visited_fragments
                     )
 
         elif isinstance(selection, InlineFragmentNode):
             if selection.selection_set:
                 for nested_selection in selection.selection_set.selections:
                     GraphQLMutationAnalyzer._collect_field_names(
-                        nested_selection, mutations, fragments
+                        nested_selection, mutations, fragments, _visited_fragments
                     )
 
     @staticmethod
