@@ -12,6 +12,7 @@ Injects user profile into Dagster sidebar with:
 import inspect
 import json
 import logging
+import re
 from typing import Optional
 
 from starlette.requests import Request
@@ -84,12 +85,12 @@ def apply_patches() -> None:
     try:
         original_index_html = webserver_module.DagsterWebserver.index_html_endpoint
 
-        if inspect.iscoroutinefunction(original_index_html):
-            async def patched_index_html(self, request: Request):
-                return await _inject_resilient_ui(self, request)
-        else:
-            def patched_index_html(self, request: Request):
-                return _inject_resilient_ui(self, request)
+        # Always async: _inject_resilient_ui is async def regardless of whether
+        # the original index_html_endpoint is sync or async. Calling an async
+        # function without await returns an unawaited coroutine that Starlette
+        # cannot invoke as a Response (Bug 1: HTTP 500 on Dagster 1.13.8).
+        async def patched_index_html(self, request: Request):
+            return await _inject_resilient_ui(self, request)
 
         webserver_module.DagsterWebserver.index_html_endpoint = patched_index_html
         logger.info("Resilient UI injection patched")
@@ -117,7 +118,15 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
         logger.error(f"Failed to get index HTML: {e}", exc_info=True)
         raise
 
-    user = getattr(request.state, "user", None)
+    # Bug 2: The middleware stores the user via dict-key assignment on scope["state"].
+    # In Starlette 1.3.1+, request.state returns scope["state"] directly, so when
+    # it is a plain dict, getattr(..., "user", None) finds no attribute and returns
+    # None — silently skipping injection. Check both access patterns defensively.
+    _raw_state = request.scope.get("state")
+    user = (
+        _raw_state.get("user") if isinstance(_raw_state, dict)
+        else getattr(request.state, "user", None)
+    )
 
     if not user or not isinstance(user, AuthUser):
         if user is not None and not isinstance(user, AuthUser):
@@ -167,6 +176,19 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
         if "</body>" not in html:
             logger.warning("No </body> tag found in HTML; cannot inject UI")
             return response
+
+        # Bug 3: Dagster emits <script nonce="..."> tags. Per CSP spec, when a nonce
+        # is present in script-src, 'unsafe-inline' is ignored — only scripts with
+        # a matching nonce execute. Copy the nonce from the first existing script tag
+        # so the injected block passes CSP validation. No-ops gracefully when no
+        # nonce is present (older Dagster or custom deployments).
+        _nonce_match = re.search(r'<script[^>]+nonce=["\']([^"\']+)["\']', html)
+        if _nonce_match:
+            injection = injection.replace(
+                "<script>",
+                f'<script nonce="{_nonce_match.group(1)}">',
+                1,
+            )
 
         html = html.replace("</body>", f"{injection}</body>", 1)
 
