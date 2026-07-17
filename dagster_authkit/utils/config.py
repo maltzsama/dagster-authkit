@@ -3,8 +3,11 @@ Configuration management for authentication system.
 Maintains placeholders for LDAP/OAuth while enabling Peewee SQL and Redis Sessions.
 """
 
+import logging
 import os
 import secrets
+
+logger = logging.getLogger(__name__)
 
 
 class AuthConfig:
@@ -86,9 +89,9 @@ class AuthConfig:
                     "in multi-pod deployments."
                 )
             self.SECRET_KEY = secrets.token_urlsafe(32)
-            print(
-                f"WARNING: Using auto-generated SECRET_KEY. Set DAGSTER_AUTH_SECRET_KEY!\n"
-                f"  Suggested value: {self.SECRET_KEY}"
+            logger.warning(
+                "Using auto-generated SECRET_KEY in non-production mode. "
+                "Set DAGSTER_AUTH_SECRET_KEY to a persistent value."
             )
         self.SESSION_COOKIE_NAME = os.getenv("DAGSTER_AUTH_COOKIE_NAME", "dagster_session")
         self.SESSION_MAX_AGE = int(os.getenv("DAGSTER_AUTH_SESSION_MAX_AGE", "86400"))  # 24h
