@@ -410,8 +410,7 @@ class DagsterAuthMiddleware:
         is_trusted = client_ip in trusted
         if not is_trusted:
             logger.warning(
-                f"Rejected proxy auth from untrusted IP: {client_ip} "
-                f"(trusted: {sorted(trusted)})"
+                f"Rejected proxy auth from untrusted IP: {client_ip}"
             )
         return is_trusted
 
