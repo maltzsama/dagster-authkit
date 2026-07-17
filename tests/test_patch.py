@@ -15,6 +15,8 @@ that affect Dagster 1.13.8 + Starlette 1.3.1:
 import asyncio
 import json
 import re
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -749,3 +751,74 @@ class TestUserDataXssEscape:
         assert '<script>bad</script>' not in body
         assert '&lt;script&gt;bad&lt;/script&gt;' in body
         assert '&lt;a&gt;test.com' in body
+
+
+# ---------------------------------------------------------------------------
+# B-11: Log injection — client_ip sanitized
+# ---------------------------------------------------------------------------
+
+class TestClientIpLogSanitization:
+    """Verifies that client_ip with CRLF is sanitized before logging."""
+
+    def test_crlf_in_client_ip_is_sanitized_in_log(self, caplog):
+        """CRLF chars in client_ip must be replaced before logging."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware, config
+
+        with caplog.at_level("WARNING"):
+            middleware = DagsterAuthMiddleware(lambda s, r, snd: None)
+            mock_request = MagicMock()
+            mock_request.client.host = "1.2.3.4\nX-Injected: true"
+
+            with patch.object(config, "DAGSTER_AUTH_PROXY_TRUSTED_IPS", {"10.0.0.1"}):
+                result = middleware._is_request_from_trusted_proxy(mock_request)
+
+            assert result is False
+
+        for record in caplog.records:
+            if "untrusted IP" in record.message:
+                assert "\n" not in record.message
+                assert "\r" not in record.message
+
+
+# ---------------------------------------------------------------------------
+# B-12: verify_patches checks function name
+# ---------------------------------------------------------------------------
+
+class TestVerifyPatches:
+    """Verifies that verify_patches checks both sentinel and function name."""
+
+    def test_verify_patches_returns_false_when_no_sentinel(self):
+        """Without _authkit_patched sentinel, verify_patches must return False."""
+        from dagster_authkit.core.patch import verify_patches
+
+        assert verify_patches() is False
+
+    def _make_fake_webserver(self, func_name):
+        parent_mod = types.ModuleType("dagster_webserver")
+        child_mod = types.ModuleType("dagster_webserver.webserver")
+        child_mod.__package__ = "dagster_webserver"
+        parent_mod.webserver = child_mod
+
+        class FakeWebserver:
+            _authkit_patched = True
+        fn = lambda self, req: None
+        setattr(fn, "__name__", func_name)
+        setattr(FakeWebserver, "index_html_endpoint", fn)
+        child_mod.DagsterWebserver = FakeWebserver
+        return parent_mod, child_mod
+
+    def test_verify_patches_returns_false_wrong_function_name(self):
+        """If the endpoint name is not patched_index_html, must return False."""
+        from dagster_authkit.core.patch import verify_patches
+
+        parent_mod, child_mod = self._make_fake_webserver("original_index_html")
+        with patch.dict(sys.modules, {"dagster_webserver": parent_mod, "dagster_webserver.webserver": child_mod}):
+            assert verify_patches() is False
+
+    def test_verify_patches_returns_true_with_correct_name(self):
+        """If both sentinel and function name match, must return True."""
+        from dagster_authkit.core.patch import verify_patches
+
+        parent_mod, child_mod = self._make_fake_webserver("patched_index_html")
+        with patch.dict(sys.modules, {"dagster_webserver": parent_mod, "dagster_webserver.webserver": child_mod}):
+            assert verify_patches() is True

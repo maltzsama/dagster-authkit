@@ -165,7 +165,7 @@ class RolePermissions:
 
     @classmethod
     def can_execute(cls, user_role: Role, mutation_name: str,
-                    default_role: Role = Role.ADMIN) -> bool:
+                    default_role: Optional[Role] = None) -> bool:
         """
         Check if a role can execute a mutation (respects role hierarchy).
 
@@ -173,7 +173,8 @@ class RolePermissions:
             user_role:     User's role.
             mutation_name: Name of the GraphQL mutation.
             default_role:  Default role for unknown mutations
-                           (default: ADMIN — deny-by-default).
+                           (default: ``None`` — no restriction;
+                           pass ``Role.ADMIN`` for deny-by-default).
 
         Returns:
             ``True`` if the user can execute, ``False`` otherwise.
