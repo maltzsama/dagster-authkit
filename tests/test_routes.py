@@ -2,7 +2,7 @@
 Tests for dagster_authkit/api/routes.py
 
 Covers:
-- N-02: CSRF double-submit cookie pattern
+- CSRF double-submit cookie pattern
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,7 +11,7 @@ from dagster_authkit.api.routes import _validate_csrf_token, _generate_csrf_toke
 
 
 class TestCsrfDoubleSubmit:
-    """Verifica o double-submit cookie pattern (N-02)."""
+    """Verifies the double-submit cookie CSRF pattern."""
 
     def test_validate_matching_token_and_cookie(self):
         """Token e cookie iguais → válido."""

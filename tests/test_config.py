@@ -137,10 +137,10 @@ class TestAuthConfigValidation:
 
 
 class TestAuthConfigSecretKey:
-    """Verifica geração e logging do SECRET_KEY (CQ-02)."""
+    """Verifies SECRET_KEY auto-generation and logging."""
 
     def test_warning_logged_when_secret_key_missing(self, monkeypatch, caplog):
-        """Sem SECRET_KEY em dev, deve logar warning (não print)."""
+        """Without SECRET_KEY in dev, a warning must be logged (not printed)."""
         monkeypatch.setenv("DAGSTER_AUTH_ENV", "development")
         monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
         with caplog.at_level("WARNING"):
@@ -150,7 +150,7 @@ class TestAuthConfigSecretKey:
         ), "Warning about auto-generated key must be logged"
 
     def test_secret_key_not_in_log(self, monkeypatch, caplog):
-        """A chave gerada não deve aparecer no log."""
+        """The generated key must not appear in log output."""
         monkeypatch.setenv("DAGSTER_AUTH_ENV", "development")
         monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
         with caplog.at_level("WARNING"):
@@ -161,7 +161,7 @@ class TestAuthConfigSecretKey:
             )
 
     def test_production_raises_without_secret_key(self, monkeypatch):
-        """Em produção, falta de SECRET_KEY deve levantar ValueError."""
+        """In production, missing SECRET_KEY must raise ValueError."""
         monkeypatch.setenv("DAGSTER_AUTH_ENV", "production")
         monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
         with pytest.raises(ValueError, match="SECRET_KEY"):

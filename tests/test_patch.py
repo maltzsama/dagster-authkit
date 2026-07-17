@@ -432,7 +432,7 @@ class TestMiddlewareStateAlignment:
 
 
 # ---------------------------------------------------------------------------
-# N-01: RBAC fail-open em payload GraphQL em lote malformado
+# RBAC fail-open on malformed GraphQL batch payloads
 # ---------------------------------------------------------------------------
 
 class TestGraphQLBatchFailClosed:
