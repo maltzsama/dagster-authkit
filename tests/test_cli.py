@@ -1,3 +1,4 @@
+import builtins
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -241,13 +242,13 @@ class TestDeleteUserCommand:
 # ── main() ────────────────────────────────────────────────────────────────
 
 
+@patch("dagster_authkit.cli.main.setup_logging", return_value=MagicMock())
+@patch("dagster_authkit.cli.main.print_banner")
+@patch("dagster_authkit.cli.main.print_config_summary")
+@patch("dagster_authkit.cli.main.verify_dagster_api_compatibility", return_value=(True, None))
+@patch("dagster_authkit.cli.main.apply_patches")
+@patch("dagster_authkit.cli.main.verify_patches", return_value=True)
 class TestMain:
-    @patch("dagster_authkit.cli.main.setup_logging", return_value=MagicMock())
-    @patch("dagster_authkit.cli.main.print_banner")
-    @patch("dagster_authkit.cli.main.print_config_summary")
-    @patch("dagster_authkit.cli.main.verify_dagster_api_compatibility", return_value=(True, None))
-    @patch("dagster_authkit.cli.main.apply_patches")
-    @patch("dagster_authkit.cli.main.verify_patches", return_value=True)
     def test_sql_bootstrap_called(
         self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
     ):
@@ -264,3 +265,189 @@ class TestMain:
             except SystemExit:
                 pass
         mock_backend.assert_called_once()
+
+    def test_management_command_intercepted(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "list-users", "--db-path", "sqlite:///:memory:"]),
+            patch("dagster_authkit.cli.cli_tools.handle_user_management", return_value=0) as mock_hm,
+        ):
+            try:
+                from dagster_authkit.cli.main import main
+                main()
+            except SystemExit:
+                pass
+        mock_hm.assert_called_once()
+        mock_compat.assert_not_called()
+
+    def test_management_command_exception(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "init-db"]),
+            patch("dagster_authkit.cli.cli_tools.handle_user_management", side_effect=RuntimeError("boom")),
+        ):
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 1
+
+    def test_compatibility_failure_exits(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        mock_compat.return_value = (False, "Dagster too old")
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 1
+        mock_compat.assert_called_once()
+
+    def test_patch_verification_fails(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        mock_verify.return_value = False
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 1
+
+    def test_patch_exception(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        mock_apply.side_effect = RuntimeError("Patch failed")
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 1
+
+    def test_delegates_to_modern_dagster_cli(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        mock_dagster_main = MagicMock()
+        import dagster_webserver.cli
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+            patch.object(dagster_webserver.cli, "main", mock_dagster_main),
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            try:
+                from dagster_authkit.cli.main import main
+                main()
+            except SystemExit:
+                pass
+        mock_dagster_main.assert_called_once()
+
+    def test_falls_back_to_legacy_dagit(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        mock_dagit_main = MagicMock()
+
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "dagster_webserver.cli":
+                raise ImportError("No module named dagster_webserver.cli")
+            return original_import(name, *args, **kwargs)
+
+        dagit_cli_mod = MagicMock()
+        dagit_cli_mod.main = mock_dagit_main
+
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+            patch.object(builtins, "__import__", mock_import),
+            patch.dict("sys.modules", {
+                "dagster_webserver.cli": None,
+                "dagit": MagicMock(),
+                "dagit.cli": dagit_cli_mod,
+            }, clear=False),
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            try:
+                from dagster_authkit.cli.main import main
+                main()
+            except SystemExit:
+                pass
+        mock_dagit_main.assert_called_once()
+
+    def test_cli_not_found_exits(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "dagster_webserver.cli":
+                raise ImportError("No module named dagster_webserver.cli")
+            if name.startswith("dagit"):
+                raise ImportError(f"No module named {name}")
+            return original_import(name, *args, **kwargs)
+
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+            patch.object(builtins, "__import__", mock_import),
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 1
+
+    def test_system_exit_2_prints_friendly_message(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging, capsys
+    ):
+        mock_dagster_main = MagicMock(side_effect=SystemExit(2))
+        import dagster_webserver.cli
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+            patch.object(dagster_webserver.cli, "main", mock_dagster_main),
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 2
+        captured = capsys.readouterr()
+        assert "Missing arguments" in captured.out or "You must provide" in captured.out
+
+    def test_unexpected_exception_exits(
+        self, mock_verify, mock_apply, mock_compat, mock_print_summary, mock_print_banner, mock_logging
+    ):
+        mock_dagster_main = MagicMock(side_effect=RuntimeError("Unexpected crash"))
+        import dagster_webserver.cli
+        with (
+            patch.object(sys, "argv", ["dagster-authkit", "-w", "workspace.yaml"]),
+            patch("dagster_authkit.cli.main.config") as mock_config,
+            patch.object(dagster_webserver.cli, "main", mock_dagster_main),
+        ):
+            mock_config.AUTH_BACKEND = "dummy"
+            mock_config.__dict__ = {"AUTH_BACKEND": "dummy"}
+            with pytest.raises(SystemExit) as exc:
+                from dagster_authkit.cli.main import main
+                main()
+        assert exc.value.code == 1
