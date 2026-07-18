@@ -52,7 +52,7 @@ jobs:
   release-prod:
     if: github.ref_name == 'main'
     runs-on: ubuntu-latest
-    needs: release-build
+    needs: test
     permissions:
       id-token: write
     environment:
