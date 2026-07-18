@@ -1,6 +1,6 @@
 # 🛡️ Dagster AuthKit
 
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13%20|%203.14-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Build Status](https://github.com/maltzsama/dagster-authkit/workflows/CI/badge.svg)](https://github.com/maltzsama/dagster-authkit/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg?logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/Apache-2.0)
 [![Coverage](https://codecov.io/gh/maltzsama/dagster-authkit/branch/main/graph/badge.svg)](https://codecov.io/gh/maltzsama/dagster-authkit)
@@ -213,7 +213,7 @@ Manage users directly from the shell. Useful for CI/CD or admin tasks.
 
 ```bash
 # Create a new launcher
-dagster-authkit add-user bob --role launcher
+dagster-authkit add-user bob --launcher
 
 # Reset password
 dagster-authkit change-password bob
