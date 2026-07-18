@@ -338,3 +338,63 @@ class TestMetricsEndpoint:
         assert "gauges" in body
         assert "histograms" in body
         assert "uptime_seconds" in body
+
+    @pytest.mark.asyncio
+    async def test_no_token_returns_403(self, monkeypatch):
+        """When METRICS_TOKEN is set but no token provided, return 403."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "secret"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = None
+        req.headers.get.return_value = ""
+        response = await metrics_endpoint(req)
+        assert response.status_code == 403
+        body = json.loads(response.body)
+        assert body["error"] == "Forbidden"
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_query_param_returns_403(self, monkeypatch):
+        """Wrong token in query param should return 403."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "correct-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = "wrong-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_header_returns_403(self, monkeypatch):
+        """Wrong token in header should return 403."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "correct-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = None
+        req.headers.get.return_value = "wrong-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_correct_token_query_param_returns_200(self, monkeypatch):
+        """Correct token in query param should return 200."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "my-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = "my-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_correct_token_header_returns_200(self, monkeypatch):
+        """Correct token in X-Metrics-Token header should return 200."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "my-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = None
+        req.headers.get.return_value = "my-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 200
