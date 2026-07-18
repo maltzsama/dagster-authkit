@@ -9,6 +9,7 @@ Covers:
 
 import threading
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -372,3 +373,50 @@ class TestRedisRateLimiter:
         """reset should not raise on Redis error."""
         mock_redis_instance.delete.side_effect = Exception("Connection lost")
         limiter.reset("user1")  # should not raise
+
+    def test_check_and_record_first_attempt(self, limiter, mock_redis_instance):
+        """First attempt should not be limited and return count 1."""
+        mock_redis_instance.eval.return_value = [0, 1]
+        limited, count = limiter.check_and_record("user1", 5, 300)
+        assert limited is False
+        assert count == 1
+
+    def test_check_and_record_under_limit(self, limiter, mock_redis_instance):
+        """Under the limit should not be limited."""
+        mock_redis_instance.eval.return_value = [0, 3]
+        limited, count = limiter.check_and_record("user1", 5, 300)
+        assert limited is False
+        assert count == 3
+
+    def test_check_and_record_at_limit(self, limiter, mock_redis_instance):
+        """At the limit should be limited."""
+        mock_redis_instance.eval.return_value = [1, 5]
+        limited, count = limiter.check_and_record("user1", 5, 300)
+        assert limited is True
+        assert count == 5
+
+    def test_check_and_record_already_limited(self, limiter, mock_redis_instance):
+        """Already over the limit should be limited."""
+        mock_redis_instance.eval.return_value = [1, 7]
+        limited, count = limiter.check_and_record("user1", 5, 300)
+        assert limited is True
+        assert count == 7
+
+    def test_check_and_record_logs_warning_when_limited(self, limiter, mock_redis_instance):
+        """Should log warning when rate limited."""
+        import dagster_authkit.auth.rate_limiter as rl_mod
+        mock_redis_instance.eval.return_value = [1, 5]
+        with patch.object(rl_mod.logger, "warning") as mock_warn:
+            limited, count = limiter.check_and_record("user1", 5, 300)
+            assert limited is True
+            mock_warn.assert_called_once()
+            msg = mock_warn.call_args[0][0]
+            assert "Rate limit triggered" in msg
+            assert "user1" in msg
+
+    def test_check_and_record_redis_error_fail_closed(self, limiter, mock_redis_instance):
+        """Redis error should fail-closed (block)."""
+        mock_redis_instance.eval.side_effect = Exception("Redis down")
+        limited, count = limiter.check_and_record("user1", 5, 300)
+        assert limited is True
+        assert count == 5
