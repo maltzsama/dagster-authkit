@@ -2,8 +2,8 @@ apiVersion: v2
 name: dagster-authkit
 description: Community authentication wrapper for self-hosted Dagster OSS
 type: application
-version: 0.4.0
-appVersion: "0.4.0"
+version: 1.0.0
+appVersion: "1.0.0"
 keywords:
   - dagster
   - authentication
