@@ -15,13 +15,12 @@ Covers:
 """
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from dagster_authkit.auth.backends.base import AuthUser, Role
+from dagster_authkit.auth.backends.base import Role
 from dagster_authkit.auth.backends.ldap import LDAPAuthBackend
-
 
 # ---------------------------------------------------------------------------
 # Fake ldap3 module fixture

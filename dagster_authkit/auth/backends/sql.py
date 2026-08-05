@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from peewee import Model, CharField, IntegerField, BooleanField, DateTimeField, DoesNotExist
+from peewee import BooleanField, CharField, DateTimeField, DoesNotExist, IntegerField, Model
 from playhouse.db_url import connect
 
 from dagster_authkit.auth.backends.base import AuthBackend, AuthUser, Role
@@ -104,7 +104,7 @@ class PeeweeAuthBackend(AuthBackend):
 
         try:
             user_obj = UserTable.get(
-                (UserTable.username == username) & (UserTable.is_active == True)
+                (UserTable.username == username) & (UserTable.is_active == True)  # noqa: E712  # Peewee query expression, not a Python truth check
             )
 
             if SecurityHardening.verify_password(password, user_obj.password_hash):
@@ -198,7 +198,7 @@ class PeeweeAuthBackend(AuthBackend):
 
     def list_users(self) -> List[AuthUser]:
         """Lists all active users in the system."""
-        users = UserTable.select().where(UserTable.is_active == True)
+        users = UserTable.select().where(UserTable.is_active == True)  # noqa: E712  # Peewee query expression, not a Python truth check
         return [
             AuthUser.from_dict(
                 {

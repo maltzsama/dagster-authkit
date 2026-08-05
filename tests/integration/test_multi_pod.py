@@ -9,7 +9,7 @@ Validates that auth works correctly across pod boundaries without Docker:
 
 from itsdangerous import URLSafeTimedSerializer
 
-from dagster_authkit.auth.backends.base import AuthUser, Role
+from dagster_authkit.auth.backends.base import Role
 from dagster_authkit.auth.session import CookieBackend
 
 

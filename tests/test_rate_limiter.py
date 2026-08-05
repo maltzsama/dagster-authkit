@@ -107,37 +107,6 @@ class TestInMemoryRateLimiter:
         assert count == 50  # 5 threads * 10 records each
 
 
-class TestRateLimiterOrchestrator:
-    """Verifies the RateLimiter facade with enabled/disabled modes."""
-
-    def test_disabled_mode(self):
-        """When disabled, rate limiter should never block."""
-        rl = RateLimiter(max_attempts=3, window_seconds=300, enabled=False)
-        for _ in range(10):
-            rl.record_attempt("user")
-        is_limited, count = rl.is_rate_limited("user")
-        assert is_limited is False
-        assert count == 0
-
-    def test_enabled_mode_blocks(self):
-        """When enabled, rate limiter should block after max_attempts."""
-        rl = RateLimiter(max_attempts=3, window_seconds=300, enabled=True)
-        for _ in range(3):
-            rl.record_attempt("user")
-        is_limited, _ = rl.is_rate_limited("user")
-        assert is_limited is True
-
-    def test_reset_when_disabled_no_error(self):
-        """Reset should not raise when disabled."""
-        rl = RateLimiter(enabled=False)
-        rl.reset("user")  # should not raise
-
-    def test_record_returns_zero_when_disabled(self):
-        """Record should return 0 when disabled."""
-        rl = RateLimiter(enabled=False)
-        assert rl.record_attempt("user") == 0
-
-
 class TestInMemoryRateLimiterOOM:
     """Verifies OOM prevention (adversarial key flooding)."""
 

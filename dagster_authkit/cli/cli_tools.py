@@ -5,8 +5,6 @@ Supports unified SQL backends (SQLite, PostgreSQL, MySQL).
 
 import argparse
 import getpass
-import sys
-from pathlib import Path
 from typing import Optional
 
 from dagster_authkit.auth.backends.base import Role
@@ -68,7 +66,7 @@ def init_db_command(args):
 
     # Force table creation
     UserTable._meta.database.create_tables([UserTable])
-    print(f"✅ Database tables initialized.")
+    print("✅ Database tables initialized.")
 
     # Check if admin already exists (auto-bootstrap might have run)
     if backend.get_user("admin"):
@@ -82,7 +80,7 @@ def init_db_command(args):
         if backend.add_user(username=username, password=password, role=Role.ADMIN):
             print(f"✅ Admin user '{username}' created successfully (Role: ADMIN)")
         else:
-            print(f"❌ Failed to create admin user.")
+            print("❌ Failed to create admin user.")
             return 1
     return 0
 
@@ -133,7 +131,7 @@ def add_user_command(args):
         print(f"✅ User '{args.username}' created successfully (Role: {role.name})")
         return 0
 
-    print(f"❌ Failed to create user (it may already exist)")
+    print("❌ Failed to create user (it may already exist)")
     return 1
 
 
@@ -154,7 +152,7 @@ def change_password_command(args):
 
     if backend.change_password(args.username, new_password, performed_by="cli"):
         print(f"✅ Password updated for '{args.username}'.")
-        print(f"🔒 Security: All active sessions for this user were revoked.")
+        print("🔒 Security: All active sessions for this user were revoked.")
         return 0
 
     print(f"❌ User '{args.username}' not found.")
@@ -216,7 +214,7 @@ def delete_user_command(args):
         print(f"✅ User '{args.username}' deleted.")
         return 0
 
-    print(f"❌ Failed to delete user (not found).")
+    print("❌ Failed to delete user (not found).")
     return 1
 
 

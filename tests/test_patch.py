@@ -12,12 +12,10 @@ that affect Dagster 1.13.8 + Starlette 1.3.1:
            <script> block, leaving the menu invisible despite being in the DOM.
 """
 
-import asyncio
 import json
-import re
 import sys
 import types
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.datastructures import State
@@ -91,7 +89,9 @@ class TestBug1AsyncWrapper:
     def test_patched_index_html_is_always_async(self):
         """apply_patches() must produce an async patched_index_html unconditionally."""
         import inspect
+
         import dagster_webserver.webserver as webserver_module
+
         from dagster_authkit.core.patch import apply_patches
 
         # Reset the sentinel so apply_patches() will run
@@ -367,8 +367,9 @@ class TestMiddlewareStateAlignment:
         object and scope['state'].user must be the AuthUser.
         """
         from starlette.datastructures import State
+
+        from dagster_authkit.auth.backends.base import Role
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
-        from dagster_authkit.auth.backends.base import AuthUser, Role
 
         captured_scope: dict = {}
 
@@ -409,7 +410,6 @@ class TestMiddlewareStateAlignment:
             mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
 
             # Build a fresh middleware with mocked config
-            from unittest.mock import PropertyMock
             middleware2 = DagsterAuthMiddleware.__new__(DagsterAuthMiddleware)
             middleware2.app = mock_app
             middleware2.is_proxy_mode = True
@@ -442,8 +442,8 @@ class TestGraphQLBatchFailClosed:
 
     @pytest.mark.asyncio
     async def test_non_dict_item_in_batch_returns_400(self):
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.backends.base import AuthUser, Role
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         sent_messages: list = []
         mock_app_called = False
@@ -531,8 +531,8 @@ class TestGraphQLBatchFailClosed:
     @pytest.mark.asyncio
     async def test_empty_batch_still_passthrough(self):
         """Empty array [] should still passthrough (regression guard)."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.backends.base import AuthUser, Role
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         mock_app_called = False
 
@@ -615,7 +615,6 @@ class TestSecurityHeaders:
     async def test_options_response_has_security_headers(self):
         """OPTIONS requests must receive security headers."""
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
-        from dagster_authkit.auth.backends.base import Role
 
         sent_messages = []
 
@@ -801,7 +800,10 @@ class TestVerifyPatches:
 
         class FakeWebserver:
             _authkit_patched = True
-        fn = lambda self, req: None
+
+        def fn(self, req):
+            return None
+
         setattr(fn, "__name__", func_name)
         setattr(FakeWebserver, "index_html_endpoint", fn)
         child_mod.DagsterWebserver = FakeWebserver

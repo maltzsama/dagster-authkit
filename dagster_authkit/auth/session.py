@@ -7,8 +7,8 @@ import json
 import logging
 import os
 import secrets
-import time
 import threading
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Optional
 
@@ -270,7 +270,7 @@ class CookieBackend(SessionBackend):
         The token remains valid on other pods until it expires naturally.
         For cross-pod individual logout, use RedisBackend."""
         try:
-            data = self.serializer.loads(token, max_age=self.max_age)
+            self.serializer.loads(token, max_age=self.max_age)
             expiry = time.time() + self.max_age
         except Exception:
             expiry = time.time() + self.max_age

@@ -13,8 +13,7 @@ os.environ.setdefault("DAGSTER_AUTH_ENV", "testing")
 os.environ.setdefault("DAGSTER_AUTH_SECRET_KEY", "test-secret-key-for-pytest")
 os.environ.setdefault("DAGSTER_AUTH_BACKEND", "dummy")  # default for tests without DB
 
-import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

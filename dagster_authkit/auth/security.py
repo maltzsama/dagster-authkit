@@ -89,7 +89,7 @@ class SecurityHardening:
             return True
 
         except Exception as e:
-            logger.error(f"Error parsing redirect URL {url}: {e}")
+            logger.exception(f"Error parsing redirect URL {url}: {e}")
             return False
 
     @staticmethod
@@ -271,7 +271,7 @@ class SecurityHardening:
                 return False
 
         except Exception as e:
-            logger.error(f"Password verification error: {e}")
+            logger.exception(f"Password verification error: {e}")
             return False
 
     @staticmethod

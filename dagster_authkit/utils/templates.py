@@ -578,7 +578,7 @@ def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool
                 itemContainer.id = 'authkit-nav-item';
                 itemContainer.className = containerClass;
 
-                itemContainer.innerHTML = 
+                itemContainer.innerHTML =
                     '<button id="authkit-trigger">' +
                         '<div class="authkit-box-proxy">' +
                             '<div class="authkit-avatar-circle">' + user.initial + '</div>' +
@@ -623,7 +623,7 @@ def render_user_menu_injection(user_data_json: str, debug: bool, safe_mode: bool
                 fallbackMenu.id = 'authkit-safe-mode-menu';
                 fallbackMenu.className = 'active';
 
-                fallbackMenu.innerHTML = 
+                fallbackMenu.innerHTML =
                     '<div class="authkit-safe-avatar">' + user.initial + '</div>' +
                     '<div class="authkit-safe-info">' + user.username + ' (' + user.role + ')</div>' +
                     '<a href="/auth/logout" class="authkit-safe-logout">Sign Out</a>';

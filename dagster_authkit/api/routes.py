@@ -24,10 +24,10 @@ from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
 from dagster_authkit.core.registry import get_backend
 from dagster_authkit.utils.audit import (
+    log_audit_event,
     log_login_attempt,
     log_logout,
     log_rate_limit_violation,
-    log_audit_event,
 )
 from dagster_authkit.utils.config import config
 from dagster_authkit.utils.templates import render_login_page
@@ -168,7 +168,7 @@ async def process_login(request: Request) -> Response:
         backend = get_backend(config.AUTH_BACKEND, config.__dict__)
         user = await run_in_threadpool(backend.authenticate, username, password)
     except Exception as e:
-        logger.error(f"Auth Backend Error: {e}")
+        logger.exception(f"Auth Backend Error: {e}")
         log_login_attempt(username, False, client_ip, "BACKEND_ERROR")
         track_login_attempt(False, username)
         return RedirectResponse(

@@ -9,9 +9,9 @@ the OAuth provider settings via environment variables.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from dagster_authkit.auth.backends.base import AuthBackend, AuthUser, Role
+from dagster_authkit.auth.backends.base import AuthBackend, AuthUser
 
 logger = logging.getLogger(__name__)
 

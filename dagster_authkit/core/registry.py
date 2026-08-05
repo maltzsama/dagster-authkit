@@ -69,7 +69,7 @@ class BackendRegistry:
                     logger.info(f"Registered backend: {entry_point.name}")
 
                 except Exception as e:
-                    logger.error(f"Failed to load backend '{entry_point.name}': {e}")
+                    logger.exception(f"Failed to load backend '{entry_point.name}': {e}")
 
             cls._initialized = True
 

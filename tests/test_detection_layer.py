@@ -3,6 +3,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from dagster_authkit.core.detection_layer import (
+    check_and_exit_if_incompatible,
+    get_compatibility_report,
+    print_compatibility_warning,
+    verify_dagster_api_compatibility,
+)
+
 
 @pytest.fixture(autouse=True)
 def _mock_starlette_middleware(monkeypatch):
@@ -15,15 +22,6 @@ def _mock_starlette_middleware(monkeypatch):
         starlette.middleware, "Middleware",
         lambda *args, **kwargs: mw_instance,
     )
-
-
-from dagster_authkit.core.detection_layer import (
-    check_and_exit_if_incompatible,
-    get_compatibility_report,
-    print_compatibility_warning,
-    verify_dagster_api_compatibility,
-)
-
 
 # ── verify_dagster_api_compatibility ──────────────────────────────────────
 
@@ -61,8 +59,9 @@ class TestVerifyCompatibility:
         assert "Missing exports" in err
 
     def test_missing_method_on_webserver(self, monkeypatch):
-        import dagster_webserver.webserver
         from unittest.mock import Mock
+
+        import dagster_webserver.webserver
         fake_cls = Mock(spec=["build_middleware"])
         fake_cls.build_middleware = MagicMock()
         monkeypatch.setattr(dagster_webserver.webserver, "DagsterWebserver", fake_cls)
