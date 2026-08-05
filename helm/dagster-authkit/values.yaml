@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: dagster-authkit
   pullPolicy: IfNotPresent
-  tag: ""  # Falls back to Chart.appVersion
+  tag: ""  # REQUIRED — exact image version (e.g. "v0.4.2"). Chart fails to render if empty.
 
 imagePullSecrets: []
 nameOverride: ""

@@ -171,6 +171,7 @@ Deploy on Kubernetes via the Helm chart in [`helm/dagster-authkit/`](./helm/dags
 
 ```bash
 helm upgrade --install dagster-authkit ./helm/dagster-authkit \
+  --set image.tag="$(git describe --tags --abbrev=0)" \
   --set authkit.secretKey="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
   --set authkit.adminPassword="your-admin-password"
 ```
