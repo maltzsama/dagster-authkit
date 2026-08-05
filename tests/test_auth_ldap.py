@@ -195,6 +195,31 @@ class TestHelpers:
         attrs = {"cn": ["jdoe", "other"]}
         assert LDAPAuthBackend._first_value(attrs, "cn") == "jdoe"
 
+    def test_first_value_scalar(self):
+        attrs = {"cn": "jdoe"}
+        assert LDAPAuthBackend._first_value(attrs, "cn") == "jdoe"
+
+    def test_first_value_scalar_empty_default(self):
+        attrs = {"cn": "jdoe"}
+        assert LDAPAuthBackend._first_value(attrs, "mail", "fallback") == "fallback"
+
+    def test_first_value_empty_list_returns_default(self):
+        attrs = {"cn": []}
+        assert LDAPAuthBackend._first_value(attrs, "cn", "fallback") == "fallback"
+
+    def test_build_auth_user_scalar_attributes(self):
+        backend = make_backend()
+        attrs = {
+            "displayName": "John Doe",
+            "mail": "john@example.com",
+            "cn": "jdoe",
+        }
+        user = backend._build_auth_user("jdoe", Role.EDITOR, attrs)
+        assert user.username == "jdoe"
+        assert user.role == Role.EDITOR
+        assert user.email == "john@example.com"
+        assert user.full_name == "John Doe"
+
     def test_first_value_missing(self):
         assert LDAPAuthBackend._first_value({}, "cn") == ""
 

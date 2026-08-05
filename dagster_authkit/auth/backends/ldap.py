@@ -118,23 +118,16 @@ class LDAPAuthBackend(AuthBackend):
         except (ValueError, TypeError):
             return 10
 
-    def _build_auth_user(self, username: str, role: Role, attrs: Dict[str, List[str]]) -> AuthUser:
+    def _build_auth_user(self, username: str, role: Role, attrs: Dict[str, Any]) -> AuthUser:
         """Build an AuthUser from LDAP attributes (shared between authenticate and get_user)."""
-
-        def _first(attr_name: str) -> str:
-            val = attrs.get(attr_name, "")
-            if isinstance(val, list):
-                return val[0] if val else ""
-            return str(val) if val else ""
-
-        display_name = _first("displayName")
-        cn_value = _first("cn")
+        display_name = self._first_value(attrs, "displayName")
+        cn_value = self._first_value(attrs, "cn")
         full_name = display_name or cn_value or username
 
         return AuthUser(
             username=username,
             role=role,
-            email=_first("mail"),
+            email=self._first_value(attrs, "mail"),
             full_name=full_name,
         )
 
@@ -404,10 +397,12 @@ class LDAPAuthBackend(AuthBackend):
             return []
 
     @staticmethod
-    def _first_value(attrs: Dict[str, list], key: str, default: str = "") -> str:
-        """Safely extract the first value from an LDAP attribute list."""
-        values = attrs.get(key, [])
-        return str(values[0]) if values else default
+    def _first_value(attrs: Dict[str, Any], key: str, default: str = "") -> str:
+        """Safely extract the first value from an LDAP attribute (scalar or list)."""
+        value = attrs.get(key, default)
+        if isinstance(value, list):
+            return str(value[0]) if value else default
+        return str(value) if value else default
 
     def list_users(self) -> List[AuthUser]:
         """Iterate through raw response to list users."""
