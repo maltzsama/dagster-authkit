@@ -353,10 +353,24 @@ class TestRedisRateLimiter:
 
     def test_record_attempt(self, limiter, mock_redis_instance):
         """record_attempt should return incremented count."""
-        mock_redis_instance.incr.return_value = 3
+        mock_redis_instance.incr.return_value = 1
         count = limiter.record_attempt("user1", 300)
-        assert count == 3
+        assert count == 1
         assert mock_redis_instance.expire.called
+
+    def test_record_attempt_sets_expiry_on_first(self, limiter, mock_redis_instance):
+        """First attempt (count==1) should set the expiry."""
+        mock_redis_instance.incr.return_value = 1
+        count = limiter.record_attempt("user1", 300)
+        assert count == 1
+        mock_redis_instance.expire.assert_called_once_with("ratelimit:user1", 300)
+
+    def test_record_attempt_does_not_reset_expiry(self, limiter, mock_redis_instance):
+        """Subsequent attempts (count>1) should not touch the expiry."""
+        mock_redis_instance.incr.return_value = 2
+        count = limiter.record_attempt("user1", 300)
+        assert count == 2
+        mock_redis_instance.expire.assert_not_called()
 
     def test_record_attempt_redis_error(self, limiter, mock_redis_instance):
         """Should return 0 on Redis error."""

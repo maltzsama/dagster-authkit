@@ -308,7 +308,9 @@ class RedisRateLimiter(RateLimiterBackend):
             return {1, count}
         end
         local new_count = redis.call('INCR', key)
-        redis.call('EXPIRE', key, window, 'NX')
+        if new_count == 1 then
+            redis.call('EXPIRE', key, window)
+        end
         if tonumber(new_count) >= max_attempts then
             return {1, new_count}
         end
@@ -336,7 +338,8 @@ class RedisRateLimiter(RateLimiterBackend):
 
         try:
             count = self.redis.incr(key)
-            self.redis.expire(key, window_seconds, nx=True)
+            if count == 1:
+                self.redis.expire(key, window_seconds)
 
             logger.debug(f"Rate limit attempt recorded: {identifier} ({count})")
 
