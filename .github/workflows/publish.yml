@@ -9,18 +9,18 @@ on:
 permissions:
   contents: write
   id-token: write
-  actions: write
 
 jobs:
   test:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
-  release-test:
-    if: startsWith(github.ref_name, 'release/')
+  release:
+    if: github.ref_name == 'main' || startsWith(github.ref_name, 'release/')
     runs-on: ubuntu-latest
     needs: test
-    environment: test-release
+    environment:
+      name: ${{ startsWith(github.ref_name, 'main') && 'release' || 'test-release' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -37,50 +37,36 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system python-semantic-release
 
+      - name: Record pre-release tag
+        id: pre
+        run: echo "tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
+
       - name: Create version with semantic-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release version
 
+      - name: Check if a release occurred
+        id: post
+        run: |
+          before="${{ steps.pre.outputs.tag }}"
+          after=$(git describe --tags --abbrev=0)
+          if [ "$before" != "$after" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build package
+        if: steps.post.outputs.released == 'true'
         run: uv build
 
       - name: Publish to TestPyPI (Trusted Publisher)
+        if: steps.post.outputs.released == 'true' && startsWith(github.ref_name, 'release/')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
 
-  release-prod:
-    if: github.ref_name == 'main'
-    runs-on: ubuntu-latest
-    needs: test
-    permissions:
-      contents: write
-      id-token: write
-    environment:
-      name: release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install uv
-        run: pip install uv
-
-      - name: Install dependencies
-        run: uv pip install --system python-semantic-release
-
-      - name: Create version with semantic-release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version
-
-      - name: Build package
-        run: uv build
-
       - name: Publish to PyPI (Trusted Publisher)
+        if: steps.post.outputs.released == 'true' && github.ref_name == 'main'
         uses: pypa/gh-action-pypi-publish@release/v1

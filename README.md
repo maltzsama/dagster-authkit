@@ -28,28 +28,18 @@ Dagster OSS has no auth. If you run it in a VPC or locally, anyone with the URL 
 
 ---
 
-## ✨ What's New in v0.4.0
+## ✨ What's New in v1.0.0
 
-### 🔐 Security Hardening (Breaking Changes)
-- **`SECRET_KEY` is now required in production.** The server will refuse to start if `DAGSTER_AUTH_SECRET_KEY` is not set and `DAGSTER_AUTH_ENV=production`. Auto-generated keys caused silent session breakage in multi-pod deployments.
-- **Proxy mode now requires trusted IPs.** Set `DAGSTER_AUTH_PROXY_TRUSTED_IPS` (comma-separated) or explicitly opt into the insecure default with `DAGSTER_AUTH_PROXY_TRUST_ALL=true`.
-- **RBAC is now deny-by-default for unknown mutations.** New GraphQL mutations added by future Dagster releases require `ADMIN` role until explicitly audited. Configure via `DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE`.
+### ☸️ Helm Chart
+- **Production-ready Kubernetes chart** under `helm/dagster-authkit/`, synced with the application's config (env vars, secrets, image tag) and versioned automatically by semantic-release. Requires an explicit `image.tag`.
 
-### 🔄 Cross-Pod Session Revocation
-- **DB-backed `session_version` column.** `change_password`, `change_role`, and `delete_user` now invalidate sessions across ALL pods without Redis. A new `session_version` column is automatically added to existing databases on upgrade.
-- **Dual rate-limiting** (username + IP). Prevents both credential stuffing and brute-force on a single account.
+### 🔄 Automated CHANGELOG
+- **`CHANGELOG.md` is now auto-generated** by semantic-release on each release, alongside the version bump. Versions are inserted above the `<!-- version list -->` marker.
+- **RBAC deny-by-default** — unknown GraphQL mutations require `ADMIN` by default.
 
-### 🛡️ Attack Surface Reduction
-- **CSRF protection** on the login form (double-submit signed cookie).
-- **WebSocket authentication** — GraphQL subscriptions at `/graphql` are now authenticated (pure ASGI middleware).
-- **XSS prevention** in login and 403 pages via HTML escaping.
-- **Open redirect hardening** — protocol-relative URLs (`//evil.com`) are blocked.
-- **Empty password rejection** across all backends (prevents unauthenticated LDAP binds).
-
-### 🏗️ Core Improvements
-- **`operationName` support in GraphQL RBAC.** Clients sending multiple operations in one document no longer trigger false-positive blocks.
-- **Backend instance caching.** Backend connections are reused across requests instead of being recreated per call.
-- **Unified role serialization.** `to_dict()` now uses `role.value` (int) for cross-backend consistency.
+### 🔐 Hardening & Fixes
+- **Rebuild of the fix backlog from v0.4.2** across CSRF (per-client double-submit), fail-closed GraphQL batches, token-gated `/auth/metrics`, Redis 6-compatible atomic rate limiting, LDAP connection cleanup, session revoked-token caps, and detection-layer Starlette `Middleware.cls` compatibility.
+- **Test coverage boosted** 44% → 52% (+98 tests: detection layer, rate limiter, metrics gate, CookieBackend, CLI, LDAP, middleware).
 
 ---
 
@@ -230,7 +220,7 @@ dagster-authkit list-permissions
 
 ## 🔮 Roadmap
 
-### Current (v0.4.0)
+### Current (v1.0.0)
 
 * ✅ Username/password auth (bcrypt)
 * ✅ 4-level RBAC (ADMIN/EDITOR/LAUNCHER/VIEWER)
@@ -239,6 +229,7 @@ dagster-authkit list-permissions
 * ✅ LDAP backend (experimental)
 * ✅ Proxy authentication (Authelia, Caddy, Traefik)
 * ✅ Kubernetes example with full SSO stack
+* ✅ Helm chart for Kubernetes deployments
 * ✅ Redis session revocation and rate limiting
 * ✅ Centralized UI templates
 * ✅ CSRF protection
@@ -246,10 +237,11 @@ dagster-authkit list-permissions
 * ✅ WebSocket authentication (GraphQL subscriptions)
 * ✅ Dual rate-limiting (username + IP)
 * ✅ Proxy trusted IP allowlist
+* ✅ Token-protected `/auth/metrics`
+* ✅ Automated `CHANGELOG.md` generation
 
 ### Next
 
-* ☸️ Helm chart for Kubernetes deployments (preview — available in `helm/`)
 * 🔄 OIDC backend (beyond proxy mode)
 
 **What we will NOT do:**

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+<!-- version list -->
+
+## [1.0.0] - 2026-08-05
+
+### Features
+
+* **Helm Chart:** New production-ready Kubernetes chart under `helm/dagster-authkit/`, synced with the application's config (env vars, secrets, image tag) and wired into semantic-release versioning.
+
+### Bug Fixes
+
+* **CSRF:** Tokens now bound to the client via a double-submit signed cookie.
+* **GraphQL parsing:** Fail closed on malformed batch payloads instead of erroring.
+* **Metrics:** Added optional token-based protection for `/auth/metrics`; removed username/action labels to prevent unbounded cardinality.
+* **RBAC deny-by-default:** `can_execute` and `DagsterAuthMiddleware` now deny unknown mutations with an `ADMIN` default role.
+* **Rate limiting:** `check_and_record` made atomic via the backend method; added double-checked locking to the singleton; rate limiter `EXPIRE` now compatible with Redis 6.
+* **LDAP:** Unbind connection in `_get_user_attributes` `finally`; safe LDAP attribute first-value extraction in `list_users`; scalar `_first_value` handling.
+* **Sessions:** Hard cap on `_MAX_REVOKED` revoked-token store to prevent OOM; `CookieBackend` revocation capped.
+* **Detection layer:** Check `Middleware.cls` attribute for Starlette compatibility.
+* **Change role:** Restored `change-role` CLI command; pass operator identity to `change_role` audit.
+* **Security headers:** Inject headers on all response paths.
+* **Logging:** `exc_info=True` on `logger.error/critical` calls; HTML-escape user data before JSON injection.
+* **Secret key:** Replace `print` with logging for auto-generated `SECRET_KEY` warning.
+* **Proxy auth:** Removed trusted IP list from proxy auth log.
+* **Helm:** Require explicit `image.tag` in the chart.
+
+### CI / DevEx
+
+* Semantic-release + uv-based workflows; fix docs deploy.
+* Replace `[all]` extra with `[sqlite]` in CI to avoid native build deps.
+* Restore `contents:write` for the semantic-release push; grant `actions:write` in the publish workflow.
+
+### Testing
+
+* Boosted coverage 44% → 52% (+98 tests).
+* Added suites: detection layer, Redis rate limiter, metrics token gate, CookieBackend, CLI (24 tests), LDAP (64 tests), middleware (WebSocket/proxy/RBAC/helpers).
+
+---
 ## [0.4.2] - 2026-07-17
 
 ### Bug Fixes
