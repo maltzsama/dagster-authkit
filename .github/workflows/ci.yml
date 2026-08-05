@@ -6,12 +6,8 @@ on:
   pull_request:
     branches: [main, develop, 'release/*']
 
-  push:
-    branches: [main, develop, 'release/*']
-
 permissions:
   contents: read
-  actions: write
 
 jobs:
   test:
@@ -39,7 +35,7 @@ jobs:
         run: uv pip install --system -e '.[dev,sqlite]'
 
       - name: Run linter (ruff)
-        run: uv run ruff check . --exit-zero
+        run: uv run ruff check .
 
       - name: Run tests with coverage
         run: |
