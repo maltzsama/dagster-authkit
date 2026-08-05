@@ -148,6 +148,7 @@ class CookieBackend(SessionBackend):
     """
 
     _VERSION_CACHE_TTL = 10.0  # seconds
+    _MAX_REVOKED = 10_000  # hard cap to prevent OOM from adversarial revocations
 
     def __init__(self, secret_key: str, max_age: int):
         self.serializer = URLSafeTimedSerializer(secret_key)
@@ -181,6 +182,7 @@ class CookieBackend(SessionBackend):
 
         try:
             from dagster_authkit.auth.backends.sql import PeeweeAuthBackend
+
             self._version_getter = PeeweeAuthBackend.get_session_version
             logger.info(
                 "CookieBackend: DB-backed session version enabled "
@@ -189,7 +191,8 @@ class CookieBackend(SessionBackend):
         except ImportError as e:
             logger.error(
                 f"CookieBackend: Failed to import SQL backend for version getter: {e}. "
-                "Session revocation will be single-pod only."
+                "Session revocation will be single-pod only.",
+                exc_info=True,
             )
 
     def _current_version(self, username: str) -> Optional[int]:
@@ -218,7 +221,8 @@ class CookieBackend(SessionBackend):
             except Exception as e:
                 logger.error(
                     f"DB unavailable for session version of '{username}': {e}. "
-                    "Rejecting session (fail-closed)."
+                    "Rejecting session (fail-closed).",
+                    exc_info=True,
                 )
                 return None
 
@@ -256,6 +260,7 @@ class CookieBackend(SessionBackend):
 
             return data
         except Exception:
+            logger.warning("Session validation failed", exc_info=True)
             return None
 
     def revoke(self, token: str) -> bool:
@@ -270,9 +275,16 @@ class CookieBackend(SessionBackend):
         except Exception:
             expiry = time.time() + self.max_age
 
-        with self._lock:
-            self._revoked[token] = expiry
         self._prune_expired_revocations()
+        with self._lock:
+            if len(self._revoked) >= self._MAX_REVOKED:
+                logger.warning(
+                    "Revoked-token store at capacity (%d); skipping token "
+                    "to prevent OOM. Increase _MAX_REVOKED if needed.",
+                    self._MAX_REVOKED,
+                )
+                return False
+            self._revoked[token] = expiry
         return True
 
     def _prune_expired_revocations(self) -> None:

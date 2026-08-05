@@ -2,6 +2,7 @@
 Dagster Monkey-Patching Module
 
 Injects user profile into Dagster sidebar with:
+
 - Async/sync detection for cross-version Dagster compatibility
 - Resilient injection that falls back to vanilla Dagster on failure
 - Multiple CSS selector fallbacks for version compatibility
@@ -9,6 +10,7 @@ Injects user profile into Dagster sidebar with:
 - Idempotent patch application (safe to call multiple times)
 """
 
+import html
 import inspect
 import json
 import logging
@@ -92,6 +94,8 @@ def apply_patches() -> None:
         async def patched_index_html(self, request: Request):
             return await _inject_resilient_ui(self, request)
 
+
+
         webserver_module.DagsterWebserver.index_html_endpoint = patched_index_html
         logger.info("Resilient UI injection patched")
     except Exception as e:
@@ -140,20 +144,16 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
         role = user.role.name
         initial = (full_name[0] if full_name else username[0]).upper()
 
-        user_data_json = (
-            json.dumps(
-                {
-                    "username": username,
-                    "full_name": full_name,
-                    "email": email,
-                    "role": role,
-                    "initial": initial,
-                    "has_email": bool(email),
-                }
-            )
-            # Prevent XSS via </script> in user data (e.g., LDAP full_name)
-            .replace("<", "\\u003c")
-            .replace(">", "\\u003e")
+        raw = {
+            "username": username,
+            "full_name": full_name,
+            "email": email,
+            "role": role,
+            "initial": initial,
+            "has_email": bool(email),
+        }
+        user_data_json = json.dumps(
+            {k: html.escape(str(v)) if isinstance(v, str) else v for k, v in raw.items()}
         )
 
         injection = render_user_menu_injection(
@@ -168,12 +168,12 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
             return response
 
         if hasattr(body, "decode"):
-            html = body.decode("utf-8")
+            html_body = body.decode("utf-8")
         else:
             logger.warning("Response body is not decodable; cannot inject UI")
             return response
 
-        if "</body>" not in html:
+        if "</body>" not in html_body:
             logger.warning("No </body> tag found in HTML; cannot inject UI")
             return response
 
@@ -182,7 +182,7 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
         # a matching nonce execute. Copy the nonce from the first existing script tag
         # so the injected block passes CSP validation. No-ops gracefully when no
         # nonce is present (older Dagster or custom deployments).
-        _nonce_match = re.search(r'<script[^>]+nonce=["\']([^"\']+)["\']', html)
+        _nonce_match = re.search(r'<script[^>]+nonce=["\']([^"\']+)["\']', html_body)
         if _nonce_match:
             injection = injection.replace(
                 "<script>",
@@ -190,7 +190,7 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
                 1,
             )
 
-        html = html.replace("</body>", f"{injection}</body>", 1)
+        html_body = html_body.replace("</body>", f"{injection}</body>", 1)
 
         headers = dict(response.headers)
         headers.pop("content-length", None)
@@ -198,7 +198,7 @@ async def _inject_resilient_ui(self, request: Request) -> HTMLResponse:
         headers.pop("etag", None)
 
         return HTMLResponse(
-            content=html,
+            content=html_body,
             status_code=response.status_code,
             headers=headers,
         )
@@ -219,7 +219,13 @@ def verify_patches() -> bool:
     try:
         import dagster_webserver.webserver as webserver_module
 
-        return getattr(webserver_module.DagsterWebserver, "_authkit_patched", False)
+        endpoint = getattr(webserver_module.DagsterWebserver, "index_html_endpoint", None)
+        if endpoint is None:
+            return False
+        return (
+            getattr(webserver_module.DagsterWebserver, "_authkit_patched", False)
+            and endpoint.__name__ == "patched_index_html"
+        )
     except Exception as e:
-        logger.error(f"Patch verification failed: {e}")
+        logger.error(f"Patch verification failed: {e}", exc_info=True)
         return False

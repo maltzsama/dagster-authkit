@@ -6,6 +6,7 @@ Matched with the finalized Peewee SQL Backend and stdout Audit Logging.
 """
 
 import hashlib
+import hmac
 import logging
 
 from itsdangerous import URLSafeTimedSerializer
@@ -14,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.routing import Route, Router
 
+from dagster_authkit.api.health import track_login_attempt, track_session_created
 from dagster_authkit.auth.rate_limiter import (
     get_rate_limiter,
     reset_rate_limit,
@@ -44,9 +46,23 @@ def _generate_csrf_token() -> str:
     return _csrf_serializer.dumps({"token": raw})
 
 
-def _validate_csrf_token(token: str) -> bool:
-    """Validate a signed CSRF token. Returns True if valid and not expired."""
+def _validate_csrf_token(token: str, cookie: str = "") -> bool:
+    """Validate a signed CSRF token via double-submit cookie pattern.
+
+    Checks that:
+    1. The form token matches the cookie value (double-submit binding).
+    2. The token is a valid signed blob and not expired.
+
+    Args:
+        token: CSRF token from the form submission.
+        cookie: CSRF token from the cookie (double-submit check).
+
+    Returns:
+        True if both checks pass.
+    """
     if not token:
+        return False
+    if cookie and not hmac.compare_digest(token, cookie):
         return False
     try:
         _csrf_serializer.loads(token, max_age=_CSRF_MAX_AGE)
@@ -81,7 +97,16 @@ async def login_page(request: Request) -> Response:
 
     html = render_login_page(next_url, error, csrf_token)
 
-    return HTMLResponse(content=html)
+    response = HTMLResponse(content=html)
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        max_age=_CSRF_MAX_AGE,
+        httponly=True,
+        secure=config.SESSION_COOKIE_SECURE,
+        samesite="lax",
+    )
+    return response
 
 
 async def process_login(request: Request) -> Response:
@@ -111,10 +136,12 @@ async def process_login(request: Request) -> Response:
     if not SecurityHardening.validate_redirect_url(next_url):
         next_url = "/"
 
-    # CSRF validation (stateless signed token, no server-side store)
+    # CSRF validation: double-submit cookie + signed token
     csrf_token = str(form.get("csrf_token", ""))
-    if not _validate_csrf_token(csrf_token):
-        logger.warning("CSRF validation failed for login attempt")
+    csrf_cookie = request.cookies.get("csrf_token", "")
+    if not _validate_csrf_token(csrf_token, cookie=csrf_cookie):
+        logger.warning("CSRF validation failed for login attempt", exc_info=True)
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Invalid+request.", status_code=302
         )
@@ -130,6 +157,7 @@ async def process_login(request: Request) -> Response:
         total = max(user_attempts, ip_attempts)
         log_login_attempt(username, False, client_ip, f"RATE_LIMIT ({total} attempts)")
         log_rate_limit_violation(username, client_ip, total)
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Too+many+attempts.", status_code=302
         )
@@ -142,6 +170,7 @@ async def process_login(request: Request) -> Response:
     except Exception as e:
         logger.error(f"Auth Backend Error: {e}")
         log_login_attempt(username, False, client_ip, "BACKEND_ERROR")
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=System+error.", status_code=302
         )
@@ -150,6 +179,7 @@ async def process_login(request: Request) -> Response:
     if not user:
         # Attempt already recorded by check_and_record above
         log_login_attempt(username, False, client_ip, "INVALID_CREDENTIALS")
+        track_login_attempt(False, username)
         return RedirectResponse(
             url=f"/auth/login?next={next_url}&error=Invalid+credentials.", status_code=302
         )
@@ -158,8 +188,10 @@ async def process_login(request: Request) -> Response:
     reset_rate_limit(username)
     reset_rate_limit(ip_identifier)
     log_login_attempt(username, True, client_ip)
+    track_login_attempt(True, username)
 
     session_token = sessions.create(user.to_dict())
+    track_session_created()
 
     session_hash = hashlib.sha256(session_token.encode()).hexdigest()[:16]
     log_audit_event("SESSION_CREATED", username, session_id=session_hash, ip=client_ip)
@@ -207,6 +239,12 @@ async def logout(request: Request) -> Response:
         httponly=config.SESSION_COOKIE_HTTPONLY,
         secure=config.SESSION_COOKIE_SECURE,
         samesite=config.SESSION_COOKIE_SAMESITE,
+    )
+    response.delete_cookie(
+        key="csrf_token",
+        httponly=True,
+        secure=config.SESSION_COOKIE_SECURE,
+        samesite="lax",
     )
     return response
 

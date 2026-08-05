@@ -94,10 +94,7 @@ class TestValidateRedirectUrl:
 
     def test_external_host_rejected(self):
         """External hosts not in allowlist should be rejected."""
-        assert (
-            SecurityHardening.validate_redirect_url("https://evil.com/malware")
-            is False
-        )
+        assert SecurityHardening.validate_redirect_url("https://evil.com/malware") is False
 
     def test_external_host_in_allowlist(self):
         """External hosts in the allowlist should be accepted."""

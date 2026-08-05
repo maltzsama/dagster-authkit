@@ -17,7 +17,6 @@ from dagster_authkit.auth.backends.base import (
     RolePermissions,
 )
 
-
 # ============================================================
 # Role Enum Tests
 # ============================================================
@@ -125,9 +124,22 @@ class TestRolePermissions:
 
     def test_can_execute_unknown_with_default_admin(self):
         """VIEWER should be blocked from unknown mutations when default is ADMIN."""
-        assert RolePermissions.can_execute(Role.VIEWER, "newDagsterMutation") is True  # no default set on can_execute
+        assert (
+            RolePermissions.can_execute(Role.VIEWER, "newDagsterMutation") is True
+        )  # no default set on can_execute
         # But get_required_role with default blocks:
         assert RolePermissions.get_required_role("newDagsterMutation", Role.ADMIN) == Role.ADMIN
+
+    def test_can_execute_deny_by_default_with_admin(self):
+        """Passing default_role=ADMIN to can_execute blocks unknown mutations."""
+        assert (
+            RolePermissions.can_execute(Role.VIEWER, "newDagsterMutation", default_role=Role.ADMIN)
+            is False
+        )
+        assert (
+            RolePermissions.can_execute(Role.ADMIN, "newDagsterMutation", default_role=Role.ADMIN)
+            is True
+        )
 
     def test_list_permissions_viewer(self):
         """VIEWER should have no mutation permissions."""
@@ -276,6 +288,7 @@ class TestAuthBackendABC:
 
     def test_optional_methods_raise_not_implemented(self):
         """Optional methods should raise NotImplementedError by default."""
+
         # We need a concrete subclass to test the default implementation
         class MinimalBackend(AuthBackend):
             def authenticate(self, username, password):

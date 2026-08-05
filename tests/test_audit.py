@@ -108,9 +108,7 @@ class TestAuditLogger:
 
     def test_access_control_allowed(self, captured_output, audit_logger):
         """Allowed access control should emit ALLOWED status."""
-        audit_logger.access_control(
-            "admin", "POST", "/graphql", True, roles=["ADMIN"]
-        )
+        audit_logger.access_control("admin", "POST", "/graphql", True, roles=["ADMIN"])
         output = captured_output.getvalue()
         data = json.loads(output)
         assert data["event_type"] == "ACCESS_CONTROL"

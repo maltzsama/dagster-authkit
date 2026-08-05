@@ -15,6 +15,8 @@ that affect Dagster 1.13.8 + Starlette 1.3.1:
 import asyncio
 import json
 import re
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -429,3 +431,394 @@ class TestMiddlewareStateAlignment:
         assert captured_scope["state"].user is user, (
             "scope['state'].user must be the AuthUser instance"
         )
+
+
+# ---------------------------------------------------------------------------
+# RBAC fail-open on malformed GraphQL batch payloads
+# ---------------------------------------------------------------------------
+
+class TestGraphQLBatchFailClosed:
+    """Verifica que batch malformado retorna 400 em vez de fazer passthrough."""
+
+    @pytest.mark.asyncio
+    async def test_non_dict_item_in_batch_returns_400(self):
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+        from dagster_authkit.auth.backends.base import AuthUser, Role
+
+        sent_messages: list = []
+        mock_app_called = False
+
+        async def mock_app(scope, receive, send):
+            nonlocal mock_app_called
+            mock_app_called = True
+
+        body = json.dumps([
+            {"query": "mutation { launchRun(input: {}) }"},
+            123,
+        ]).encode("utf-8")
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send_fn(message):
+            sent_messages.append(message)
+
+        user = AuthUser(
+            username="viewer",
+            role=Role.VIEWER,
+            email="viewer@localhost",
+            full_name="Viewer User",
+        )
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [
+                (b"remote-user", b"viewer"),
+                (b"remote-groups", b""),
+                (b"remote-email", b"viewer@localhost"),
+                (b"remote-name", b"Viewer User"),
+                (b"content-type", b"application/json"),
+            ],
+            "server": ("localhost", 3000),
+            "client": ("127.0.0.1", 12345),
+        }
+
+        with patch("dagster_authkit.core.middleware.config") as mock_cfg:
+            mock_cfg.AUTH_BACKEND = "proxy"
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUST_ALL = True
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUSTED_IPS = None
+            mock_cfg.SESSION_COOKIE_NAME = "test_session"
+            mock_cfg.DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE = "EDITOR"
+            mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
+
+            middleware = DagsterAuthMiddleware.__new__(DagsterAuthMiddleware)
+            middleware.app = mock_app
+            middleware.is_proxy_mode = True
+            middleware._unknown_mutation_role = Role.EDITOR
+            middleware._rest_write_role = Role.EDITOR
+
+            proxy_backend_mock = MagicMock()
+            proxy_backend_mock.get_user_from_headers.return_value = user
+            middleware.proxy_backend = proxy_backend_mock
+
+            with patch.object(middleware, "_is_request_from_trusted_proxy", return_value=True):
+                await middleware(scope, receive, send_fn)
+
+        assert not mock_app_called, (
+            "Malformed batch must NOT passthrough to Dagster"
+        )
+
+        assert len(sent_messages) >= 2, (
+            f"Expected >=2 response messages, got {len(sent_messages)}"
+        )
+        start_msg = sent_messages[0]
+        assert start_msg["type"] == "http.response.start", (
+            f"First message should be http.response.start, got {start_msg['type']}"
+        )
+        assert start_msg["status"] == 400, (
+            f"Expected 400 for malformed batch, got {start_msg['status']}"
+        )
+
+        body_msg = sent_messages[1]
+        error_body = body_msg.get("body", b"")
+        assert b"Invalid GraphQL request format" in error_body, (
+            "Response must contain error message about invalid format"
+        )
+
+    @pytest.mark.asyncio
+    async def test_empty_batch_still_passthrough(self):
+        """Empty array [] should still passthrough (regression guard)."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+        from dagster_authkit.auth.backends.base import AuthUser, Role
+
+        mock_app_called = False
+
+        async def mock_app(scope, receive, send):
+            nonlocal mock_app_called
+            mock_app_called = True
+
+        body = json.dumps([]).encode("utf-8")
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send_fn(message):
+            pass
+
+        user = AuthUser(
+            username="admin",
+            role=Role.ADMIN,
+            email="admin@localhost",
+            full_name="System Administrator",
+        )
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [
+                (b"remote-user", b"admin"),
+                (b"remote-groups", b""),
+                (b"remote-email", b"admin@localhost"),
+                (b"remote-name", b"System Administrator"),
+                (b"content-type", b"application/json"),
+            ],
+            "server": ("localhost", 3000),
+            "client": ("127.0.0.1", 12345),
+        }
+
+        with patch("dagster_authkit.core.middleware.config") as mock_cfg:
+            mock_cfg.AUTH_BACKEND = "proxy"
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUST_ALL = True
+            mock_cfg.DAGSTER_AUTH_PROXY_TRUSTED_IPS = None
+            mock_cfg.SESSION_COOKIE_NAME = "test_session"
+            mock_cfg.DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE = "EDITOR"
+            mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
+
+            middleware = DagsterAuthMiddleware.__new__(DagsterAuthMiddleware)
+            middleware.app = mock_app
+            middleware.is_proxy_mode = True
+            middleware._unknown_mutation_role = Role.EDITOR
+            middleware._rest_write_role = Role.EDITOR
+
+            proxy_backend_mock = MagicMock()
+            proxy_backend_mock.get_user_from_headers.return_value = user
+            middleware.proxy_backend = proxy_backend_mock
+
+            with patch.object(middleware, "_is_request_from_trusted_proxy", return_value=True):
+                await middleware(scope, receive, send_fn)
+
+        assert mock_app_called, (
+            "Empty batch must still passthrough to Dagster"
+        )
+
+
+# ---------------------------------------------------------------------------
+# B-01: Security headers on all response paths
+# ---------------------------------------------------------------------------
+
+class TestSecurityHeaders:
+    """Verifies security headers are injected on all response paths."""
+
+    @staticmethod
+    def _get_header_dict(headers):
+        return {
+            k.decode("latin-1"): v.decode("latin-1")
+            for k, v in (headers or [])
+        }
+
+    @pytest.mark.asyncio
+    async def test_options_response_has_security_headers(self):
+        """OPTIONS requests must receive security headers."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+        from dagster_authkit.auth.backends.base import Role
+
+        sent_messages = []
+
+        async def mock_app(scope, receive, send):
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/html")],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"ok",
+            })
+
+        async def send_fn(message):
+            sent_messages.append(message)
+
+        scope = {
+            "type": "http",
+            "method": "OPTIONS",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [],
+            "server": ("localhost", 3000),
+            "client": ("127.0.0.1", 12345),
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        with patch("dagster_authkit.core.middleware.config") as mock_cfg:
+            mock_cfg.AUTH_BACKEND = "dummy"
+            mock_cfg.SESSION_COOKIE_NAME = "test_session"
+            mock_cfg.DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE = "EDITOR"
+            mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
+
+            middleware = DagsterAuthMiddleware(mock_app)
+
+            await middleware(scope, receive, send_fn)
+
+        assert len(sent_messages) >= 1
+        start_msg = sent_messages[0]
+        assert start_msg["type"] == "http.response.start"
+        headers = self._get_header_dict(start_msg.get("headers", []))
+        assert headers.get("X-Content-Type-Options") == "nosniff"
+        assert headers.get("X-Frame-Options") == "DENY"
+
+    @pytest.mark.asyncio
+    async def test_inject_headers_send_wrapper(self):
+        """_inject_headers_send must add security headers to any response."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
+
+        captured = []
+
+        async def mock_send(message):
+            captured.append(message)
+
+        wrapped_send = DagsterAuthMiddleware._inject_headers_send(mock_send)
+        await wrapped_send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"content-type", b"text/html")],
+        })
+
+        headers = self._get_header_dict(captured[0].get("headers", []))
+        assert headers.get("X-Content-Type-Options") == "nosniff"
+        assert headers.get("X-Frame-Options") == "DENY"
+        assert "Content-Security-Policy" in headers
+
+
+# ---------------------------------------------------------------------------
+# N-03: XSS — user data escaped in injected JSON
+# ---------------------------------------------------------------------------
+
+class TestUserDataXssEscape:
+    """Verifies that HTML-special chars in user data are escaped before injection."""
+
+    @pytest.mark.asyncio
+    async def test_html_special_chars_in_full_name_are_escaped(self):
+        """full_name with HTML special chars must be escaped in injected JSON."""
+        from dagster_authkit.core import patch as patch_module
+
+        user = AuthUser(
+            username="testuser",
+            role=Role.VIEWER,
+            email="test@test.com",
+            full_name='<img src=x onerror=alert(1)>',
+        )
+        scope = _make_scope()
+        state = State()
+        state.user = user
+        scope["state"] = state
+
+        request = Request(scope)
+        original_backup = patch_module.original_index_html
+        patch_module.original_index_html = lambda self, req: _html_response(_MINIMAL_HTML)
+        try:
+            response = await patch_module._inject_resilient_ui(None, request)
+        finally:
+            patch_module.original_index_html = original_backup
+
+        body = response.body.decode()
+        # The raw <img> tag must NOT appear in the response
+        assert '<img src=x' not in body
+        # The HTML-escaped form should appear instead
+        assert '&lt;img src=x onerror=alert(1)&gt;' in body or '\\u003c' not in body
+
+    @pytest.mark.asyncio
+    async def test_xss_in_username_and_email_escaped(self):
+        """username and email with HTML special chars must be escaped."""
+        from dagster_authkit.core import patch as patch_module
+
+        user = AuthUser(
+            username='"><script>bad</script>',
+            role=Role.VIEWER,
+            email='evil@<a>test.com',
+            full_name='Normal Name',
+        )
+        scope = _make_scope()
+        state = State()
+        state.user = user
+        scope["state"] = state
+
+        request = Request(scope)
+        original_backup = patch_module.original_index_html
+        patch_module.original_index_html = lambda self, req: _html_response(_MINIMAL_HTML)
+        try:
+            response = await patch_module._inject_resilient_ui(None, request)
+        finally:
+            patch_module.original_index_html = original_backup
+
+        body = response.body.decode()
+        assert '<script>bad</script>' not in body
+        assert '&lt;script&gt;bad&lt;/script&gt;' in body
+        assert '&lt;a&gt;test.com' in body
+
+
+# ---------------------------------------------------------------------------
+# B-11: Log injection — client_ip sanitized
+# ---------------------------------------------------------------------------
+
+class TestClientIpLogSanitization:
+    """Verifies that client_ip with CRLF is sanitized before logging."""
+
+    def test_crlf_in_client_ip_is_sanitized_in_log(self, caplog):
+        """CRLF chars in client_ip must be replaced before logging."""
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware, config
+
+        with caplog.at_level("WARNING"):
+            middleware = DagsterAuthMiddleware(lambda s, r, snd: None)
+            mock_request = MagicMock()
+            mock_request.client.host = "1.2.3.4\nX-Injected: true"
+
+            with patch.object(config, "DAGSTER_AUTH_PROXY_TRUSTED_IPS", {"10.0.0.1"}):
+                result = middleware._is_request_from_trusted_proxy(mock_request)
+
+            assert result is False
+
+        for record in caplog.records:
+            if "untrusted IP" in record.message:
+                assert "\n" not in record.message
+                assert "\r" not in record.message
+
+
+# ---------------------------------------------------------------------------
+# B-12: verify_patches checks function name
+# ---------------------------------------------------------------------------
+
+class TestVerifyPatches:
+    """Verifies that verify_patches checks both sentinel and function name."""
+
+    def test_verify_patches_returns_false_when_no_sentinel(self):
+        """Without _authkit_patched sentinel, verify_patches must return False."""
+        from dagster_authkit.core.patch import verify_patches
+
+        assert verify_patches() is False
+
+    def _make_fake_webserver(self, func_name):
+        parent_mod = types.ModuleType("dagster_webserver")
+        child_mod = types.ModuleType("dagster_webserver.webserver")
+        child_mod.__package__ = "dagster_webserver"
+        parent_mod.webserver = child_mod
+
+        class FakeWebserver:
+            _authkit_patched = True
+        fn = lambda self, req: None
+        setattr(fn, "__name__", func_name)
+        setattr(FakeWebserver, "index_html_endpoint", fn)
+        child_mod.DagsterWebserver = FakeWebserver
+        return parent_mod, child_mod
+
+    def test_verify_patches_returns_false_wrong_function_name(self):
+        """If the endpoint name is not patched_index_html, must return False."""
+        from dagster_authkit.core.patch import verify_patches
+
+        parent_mod, child_mod = self._make_fake_webserver("original_index_html")
+        with patch.dict(sys.modules, {"dagster_webserver": parent_mod, "dagster_webserver.webserver": child_mod}):
+            assert verify_patches() is False
+
+    def test_verify_patches_returns_true_with_correct_name(self):
+        """If both sentinel and function name match, must return True."""
+        from dagster_authkit.core.patch import verify_patches
+
+        parent_mod, child_mod = self._make_fake_webserver("patched_index_html")
+        with patch.dict(sys.modules, {"dagster_webserver": parent_mod, "dagster_webserver.webserver": child_mod}):
+            assert verify_patches() is True

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: dagster-authkit
+description: Community authentication wrapper for self-hosted Dagster OSS
+type: application
+version: 0.4.0
+appVersion: "0.4.0"
+keywords:
+  - dagster
+  - authentication
+  - rbac
+  - security
+  - self-hosted
+maintainers:
+  - name: Demetrius Albuquerque
+    email: demetrius.albuquerque@yahoo.com.br
+icon: https://raw.githubusercontent.com/maltzsama/dagster-authkit/main/docs/assets/icon.png

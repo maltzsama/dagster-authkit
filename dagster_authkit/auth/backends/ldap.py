@@ -118,22 +118,16 @@ class LDAPAuthBackend(AuthBackend):
         except (ValueError, TypeError):
             return 10
 
-    def _build_auth_user(self, username: str, role: Role, attrs: Dict[str, List[str]]) -> AuthUser:
+    def _build_auth_user(self, username: str, role: Role, attrs: Dict[str, Any]) -> AuthUser:
         """Build an AuthUser from LDAP attributes (shared between authenticate and get_user)."""
-        def _first(attr_name: str) -> str:
-            val = attrs.get(attr_name, "")
-            if isinstance(val, list):
-                return val[0] if val else ""
-            return str(val) if val else ""
-
-        display_name = _first("displayName")
-        cn_value = _first("cn")
+        display_name = self._first_value(attrs, "displayName")
+        cn_value = self._first_value(attrs, "cn")
         full_name = display_name or cn_value or username
 
         return AuthUser(
             username=username,
             role=role,
-            email=_first("mail"),
+            email=self._first_value(attrs, "mail"),
             full_name=full_name,
         )
 
@@ -265,18 +259,20 @@ class LDAPAuthBackend(AuthBackend):
         """Fetch attributes using raw response from SAFE_SYNC tuple.
         If existing_conn is provided, the caller is responsible for cleanup.
         Otherwise, a new connection is created and properly cleaned up."""
-        try:
-            from ldap3 import Connection, SAFE_SYNC
+        from ldap3 import Connection, SAFE_SYNC
 
-            owns_connection = existing_conn is None
-            conn = existing_conn or Connection(
-                self.server,
-                user=self.bind_dn,
-                password=self.bind_password,
-                client_strategy=SAFE_SYNC,
-                auto_bind=True,
-                receive_timeout=self._get_timeout(),
-            )
+        owns_connection = existing_conn is None
+        conn = existing_conn
+        try:
+            if conn is None:
+                conn = Connection(
+                    self.server,
+                    user=self.bind_dn,
+                    password=self.bind_password,
+                    client_strategy=SAFE_SYNC,
+                    auto_bind=True,
+                    receive_timeout=self._get_timeout(),
+                )
 
             attrs_to_fetch = ["cn", "displayName", "mail", "memberOf"]
             if self.role_attribute:
@@ -293,10 +289,12 @@ class LDAPAuthBackend(AuthBackend):
                 attrs = response[0].get("attributes", {})
 
                 # DEBUG: Show LDAP attributes
-                logger.debug(f"LDAP attributes fetched for {user_dn}: "
-                            f"displayName={attrs.get('displayName')}, "
-                            f"cn={attrs.get('cn')}, "
-                            f"mail={attrs.get('mail')}")
+                logger.debug(
+                    f"LDAP attributes fetched for {user_dn}: "
+                    f"displayName={attrs.get('displayName')}, "
+                    f"cn={attrs.get('cn')}, "
+                    f"mail={attrs.get('mail')}"
+                )
 
                 return attrs
 
@@ -304,6 +302,9 @@ class LDAPAuthBackend(AuthBackend):
         except Exception as e:
             logger.error(f"LDAP: Error fetching attributes for {user_dn}: {e}")
             return {}
+        finally:
+            if owns_connection and conn is not None:
+                conn.unbind()
 
     def _determine_role(self, user_dn: str, attrs: Dict[str, List[str]], conn=None) -> Role:
         """
@@ -395,6 +396,14 @@ class LDAPAuthBackend(AuthBackend):
             logger.error(f"LDAP: Manual group search failed: {e}", exc_info=True)
             return []
 
+    @staticmethod
+    def _first_value(attrs: Dict[str, Any], key: str, default: str = "") -> str:
+        """Safely extract the first value from an LDAP attribute (scalar or list)."""
+        value = attrs.get(key, default)
+        if isinstance(value, list):
+            return str(value[0]) if value else default
+        return str(value) if value else default
+
     def list_users(self) -> List[AuthUser]:
         """Iterate through raw response to list users."""
         try:
@@ -418,15 +427,15 @@ class LDAPAuthBackend(AuthBackend):
             if status and response:
                 for entry in response:
                     raw_attrs = entry.get("attributes", {})
-                    username = raw_attrs.get("cn", ["unknown"])[0]
+                    username = self._first_value(raw_attrs, "cn", "unknown")
                     role = self._determine_role(entry["dn"], raw_attrs)
 
                     users.append(
                         AuthUser(
                             username=username,
                             role=role,
-                            email=raw_attrs.get("mail", [""])[0],
-                            full_name=raw_attrs.get("displayName", [username])[0],
+                            email=self._first_value(raw_attrs, "mail"),
+                            full_name=self._first_value(raw_attrs, "displayName", username),
                         )
                     )
 

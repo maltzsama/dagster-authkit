@@ -136,6 +136,38 @@ class TestAuthConfigValidation:
         assert cfg.REDIS_URL == "rediss://localhost:6380"
 
 
+class TestAuthConfigSecretKey:
+    """Verifies SECRET_KEY auto-generation and logging."""
+
+    def test_warning_logged_when_secret_key_missing(self, monkeypatch, caplog):
+        """Without SECRET_KEY in dev, a warning must be logged (not printed)."""
+        monkeypatch.setenv("DAGSTER_AUTH_ENV", "development")
+        monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
+        with caplog.at_level("WARNING"):
+            cfg = AuthConfig()
+        assert any(
+            "auto-generated SECRET_KEY" in msg for msg in caplog.messages
+        ), "Warning about auto-generated key must be logged"
+
+    def test_secret_key_not_in_log(self, monkeypatch, caplog):
+        """The generated key must not appear in log output."""
+        monkeypatch.setenv("DAGSTER_AUTH_ENV", "development")
+        monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
+        with caplog.at_level("WARNING"):
+            cfg = AuthConfig()
+        for msg in caplog.messages:
+            assert cfg.SECRET_KEY not in msg, (
+                "SECRET_KEY value must not appear in log"
+            )
+
+    def test_production_raises_without_secret_key(self, monkeypatch):
+        """In production, missing SECRET_KEY must raise ValueError."""
+        monkeypatch.setenv("DAGSTER_AUTH_ENV", "production")
+        monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
+        with pytest.raises(ValueError, match="SECRET_KEY"):
+            AuthConfig()
+
+
 class TestAuthConfigFromEnv:
     """Verifies environment variable overrides."""
 

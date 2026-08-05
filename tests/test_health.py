@@ -17,8 +17,11 @@ import pytest
 
 from dagster_authkit.api.health import (
     MetricsCollector,
+    _check_db_connection,
     get_health_status,
     get_metrics_collector,
+    health_endpoint,
+    metrics_endpoint,
     track_login_attempt,
     track_rbac_decision,
     track_request_duration,
@@ -135,14 +138,16 @@ class TestMetricTrackingFunctions:
         # information leakage via /metrics and unbounded cardinality.
 
     def test_track_rbac_decision(self):
-        """RBAC decisions should be tracked with role and action."""
-        track_rbac_decision(True, "ADMIN", "launchRun")
+        """RBAC decisions should be tracked with status and role labels only."""
+        track_rbac_decision(True, "ADMIN")
         metrics = get_metrics_collector().get_metrics()
         counters = metrics["counters"]
         assert any(
             "auth_rbac_decisions_total" in k and "status=allowed" in k and "role=ADMIN" in k
             for k in counters
         )
+        # Action must NOT be a metric label (prevents unbounded cardinality)
+        assert not any("action=" in k for k in counters if "auth_rbac_decisions_total" in k)
 
     def test_track_session_created(self):
         """Session creation should increment the counter."""
@@ -155,3 +160,241 @@ class TestMetricTrackingFunctions:
         track_request_duration("/graphql", 0.25)
         metrics = get_metrics_collector().get_metrics()
         assert "auth_request_duration_seconds{endpoint=/graphql}" in metrics["histograms"]
+
+
+class TestCheckDbConnection:
+    """Verifies the database connection check function."""
+
+    def test_no_db_attr_returns_false(self):
+        """Backend without db attribute should return False."""
+        backend = MagicMock(spec=[])
+        assert _check_db_connection(backend) is False
+
+    def test_db_is_none_returns_false(self):
+        """Backend with db=None should return False."""
+        backend = MagicMock()
+        backend.db = None
+        assert _check_db_connection(backend) is False
+
+    def test_db_ping_success(self):
+        """Successful execute_sql should return True."""
+        backend = MagicMock()
+        backend.db = MagicMock()
+        assert _check_db_connection(backend) is True
+
+    def test_db_ping_exception(self):
+        """Failed execute_sql should return False."""
+        backend = MagicMock()
+        backend.db = MagicMock()
+        backend.db.execute_sql.side_effect = Exception("Timeout")
+        assert _check_db_connection(backend) is False
+
+
+class TestGetHealthStatus:
+    """Verifies the get_health_status function."""
+
+    def test_includes_timestamp(self):
+        """Health response should include a timestamp."""
+        health = get_health_status()
+        assert "timestamp" in health
+        assert "T" in health["timestamp"]
+
+    def test_includes_version(self):
+        """Health response should include version."""
+        health = get_health_status()
+        assert "version" in health
+
+    def test_includes_backend_name(self):
+        """Health response should include the current backend name."""
+        health = get_health_status()
+        assert health["backend"] == "dummy"
+
+    def test_includes_metrics(self):
+        """Health response should include metrics summary."""
+        health = get_health_status()
+        assert "metrics" in health
+        assert "uptime_seconds" in health["metrics"]
+
+    def test_database_check_sql_backend(self, monkeypatch):
+        """With SQL backend, health should include database check."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.AUTH_BACKEND", "sql"
+        )
+
+        backend = MagicMock()
+        backend.get_name.return_value = "sql (Peewee)"
+        backend.db = MagicMock()
+
+        monkeypatch.setattr(
+            "dagster_authkit.api.health.get_backend",
+            lambda name, cfg: backend,
+        )
+        health = get_health_status()
+        assert "database" in health.get("checks", {})
+
+    def test_backend_exception_makes_unhealthy(self, monkeypatch):
+        """If get_backend raises, status should be unhealthy."""
+        monkeypatch.setattr(
+            "dagster_authkit.api.health.get_backend",
+            lambda name, cfg: (_ for _ in ()).throw(Exception("Backend error")),
+        )
+        health = get_health_status()
+        assert health["status"] == "unhealthy"
+        assert "error" in health["checks"]["backend"]
+
+
+class TestHealthEndpoint:
+    """Verifies the health_endpoint async handler."""
+
+    @pytest.fixture
+    def mock_request(self):
+        """Returns a mock Starlette request."""
+        req = MagicMock()
+        req.query_params = MagicMock()
+        req.query_params.get = MagicMock(return_value="full")
+        return req
+
+    @pytest.mark.asyncio
+    async def test_liveness(self, mock_request):
+        """type=live should return 200 always."""
+        mock_request.query_params.get.return_value = "live"
+        response = await health_endpoint(mock_request)
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["alive"] is True
+
+    @pytest.mark.asyncio
+    async def test_readiness_dummy_backend(self, mock_request):
+        """type=ready with dummy backend should return 200."""
+        mock_request.query_params.get.return_value = "ready"
+        response = await health_endpoint(mock_request)
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["ready"] is True
+
+    @pytest.mark.asyncio
+    async def test_readiness_db_failure(self, mock_request, monkeypatch):
+        """type=ready with failed DB should return 503."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.AUTH_BACKEND", "sql"
+        )
+        mock_request.query_params.get.return_value = "ready"
+        backend = MagicMock()
+        backend.db = MagicMock()
+        backend.db.execute_sql.side_effect = Exception("DB down")
+        monkeypatch.setattr(
+            "dagster_authkit.api.health.get_backend",
+            lambda name, cfg: backend,
+        )
+        response = await health_endpoint(mock_request)
+        assert response.status_code == 503
+        body = json.loads(response.body)
+        assert body["ready"] is False
+
+    @pytest.mark.asyncio
+    async def test_readiness_backend_exception(self, mock_request, monkeypatch):
+        """type=ready with backend error should return 503."""
+        mock_request.query_params.get.return_value = "ready"
+        monkeypatch.setattr(
+            "dagster_authkit.api.health.get_backend",
+            lambda name, cfg: (_ for _ in ()).throw(Exception("Init failed")),
+        )
+        response = await health_endpoint(mock_request)
+        assert response.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_full_health(self, mock_request):
+        """Default (full) health check should return full status."""
+        mock_request.query_params.get.return_value = "full"
+        response = await health_endpoint(mock_request)
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert "status" in body
+        assert "checks" in body
+
+    @pytest.mark.asyncio
+    async def test_full_health_unhealthy(self, mock_request, monkeypatch):
+        """Full health check with backend error should return 503."""
+        mock_request.query_params.get.return_value = "full"
+        monkeypatch.setattr(
+            "dagster_authkit.api.health.get_backend",
+            lambda name, cfg: (_ for _ in ()).throw(Exception("Broken")),
+        )
+        response = await health_endpoint(mock_request)
+        assert response.status_code == 503
+
+
+class TestMetricsEndpoint:
+    """Verifies the metrics_endpoint async handler."""
+
+    @pytest.mark.asyncio
+    async def test_returns_json_with_counters(self):
+        """Metrics endpoint should return JSON with counters."""
+        req = MagicMock()
+        response = await metrics_endpoint(req)
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert "counters" in body
+        assert "gauges" in body
+        assert "histograms" in body
+        assert "uptime_seconds" in body
+
+    @pytest.mark.asyncio
+    async def test_no_token_returns_403(self, monkeypatch):
+        """When METRICS_TOKEN is set but no token provided, return 403."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "secret"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = None
+        req.headers.get.return_value = ""
+        response = await metrics_endpoint(req)
+        assert response.status_code == 403
+        body = json.loads(response.body)
+        assert body["error"] == "Forbidden"
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_query_param_returns_403(self, monkeypatch):
+        """Wrong token in query param should return 403."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "correct-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = "wrong-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_header_returns_403(self, monkeypatch):
+        """Wrong token in header should return 403."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "correct-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = None
+        req.headers.get.return_value = "wrong-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_correct_token_query_param_returns_200(self, monkeypatch):
+        """Correct token in query param should return 200."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "my-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = "my-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_correct_token_header_returns_200(self, monkeypatch):
+        """Correct token in X-Metrics-Token header should return 200."""
+        monkeypatch.setattr(
+            "dagster_authkit.utils.config.config.METRICS_TOKEN", "my-token"
+        )
+        req = MagicMock()
+        req.query_params.get.return_value = None
+        req.headers.get.return_value = "my-token"
+        response = await metrics_endpoint(req)
+        assert response.status_code == 200

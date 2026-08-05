@@ -1,5 +1,12 @@
 # 🛡️ Dagster AuthKit
 
+[![Python Version](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13%20|%203.14-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Build Status](https://github.com/maltzsama/dagster-authkit/workflows/CI/badge.svg)](https://github.com/maltzsama/dagster-authkit/actions)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg?logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/Apache-2.0)
+[![Coverage](https://codecov.io/gh/maltzsama/dagster-authkit/branch/main/graph/badge.svg)](https://codecov.io/gh/maltzsama/dagster-authkit)
+[![PyPI Version](https://img.shields.io/pypi/v/dagster-authkit?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/dagster-authkit/)
+[![Downloads](https://img.shields.io/pypi/dm/dagster-authkit?logo=pypi&logoColor=white)](https://pypi.org/project/dagster-authkit/)
+
 **Community authentication wrapper for self-hosted Dagster OSS.**
 
 *Authentication, RBAC, and Audit logs for Dagster without touching internal code.*
@@ -158,6 +165,19 @@ export DAGSTER_AUTH_PROXY_LOGIN_URL=https://auth.yourcompany.com
 dagster-authkit -f your_pipeline.py -h 0.0.0.0 -p 3000
 ```
 
+### ☸️ Helm (Kubernetes)
+
+Deploy on Kubernetes via the Helm chart in [`helm/dagster-authkit/`](./helm/dagster-authkit/):
+
+```bash
+helm upgrade --install dagster-authkit ./helm/dagster-authkit \
+  --set image.tag="$(git describe --tags --abbrev=0)" \
+  --set authkit.secretKey="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
+  --set authkit.adminPassword="your-admin-password"
+```
+
+See [`values.yaml`](./helm/dagster-authkit/values.yaml) for all configuration options.
+
 ---
 
 ## 🔐 Roles (RBAC)
@@ -194,7 +214,7 @@ Manage users directly from the shell. Useful for CI/CD or admin tasks.
 
 ```bash
 # Create a new launcher
-dagster-authkit add-user bob --role launcher
+dagster-authkit add-user bob --launcher
 
 # Reset password
 dagster-authkit change-password bob
@@ -229,7 +249,7 @@ dagster-authkit list-permissions
 
 ### Next
 
-* 🔄 Helm chart for Kubernetes deployments
+* ☸️ Helm chart for Kubernetes deployments (preview — available in `helm/`)
 * 🔄 OIDC backend (beyond proxy mode)
 
 **What we will NOT do:**

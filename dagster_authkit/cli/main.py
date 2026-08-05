@@ -18,7 +18,6 @@ from dagster_authkit.utils.logging import setup_logging
 
 # List of commands that should be handled by our internal management CLI
 MANAGEMENT_COMMANDS = [
-    "user",
     "init-db",
     "add-user",
     "list-users",
@@ -89,7 +88,7 @@ def main():
             logger.critical("Patch verification failed — patches were not applied correctly.")
             sys.exit(1)
     except Exception as e:
-        logger.critical(f"Fatal error during patching: {e}")
+        logger.critical(f"Fatal error during patching: {e}", exc_info=True)
         sys.exit(1)
 
     # 6. Database Bootstrap (SQL Backend)
@@ -103,7 +102,7 @@ def main():
             PeeweeAuthBackend(config.__dict__)
             logger.info("✅ SQL Database is ready")
         except Exception as e:
-            logger.error(f"Database bootstrap warning: {e}")
+            logger.error(f"Database bootstrap warning: {e}", exc_info=True)
             # We don't exit here as the server might still start with limited functionality
 
     # 7. Delegate to Official Dagster CLI

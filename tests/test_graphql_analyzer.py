@@ -53,9 +53,7 @@ class TestExtractMutationNames:
         query GetRuns { runs { runId } }
         mutation DeleteAll { deleteRun(runId: "x") }
         """
-        mutations = GraphQLMutationAnalyzer.extract_mutation_names(
-            query, operation_name="GetRuns"
-        )
+        mutations = GraphQLMutationAnalyzer.extract_mutation_names(query, operation_name="GetRuns")
         assert mutations == set()
 
     def test_operation_name_filters_mutation(self):
@@ -78,9 +76,7 @@ class TestExtractMutationNames:
 
     def test_query_not_mutation(self):
         """A 'query' operation should not produce mutation names."""
-        mutations = GraphQLMutationAnalyzer.extract_mutation_names(
-            "query { runs { runId } }"
-        )
+        mutations = GraphQLMutationAnalyzer.extract_mutation_names("query { runs { runId } }")
         assert mutations == set()
 
     def test_empty_query(self):
@@ -95,9 +91,7 @@ class TestExtractMutationNames:
 
     def test_unparseable_query(self):
         """An unparseable query should return the sentinel set."""
-        mutations = GraphQLMutationAnalyzer.extract_mutation_names(
-            "not valid graphql {{{"
-        )
+        mutations = GraphQLMutationAnalyzer.extract_mutation_names("not valid graphql {{{")
         assert "__UNPARSEABLE_QUERY__" in mutations
 
     def test_multiple_mutation_operations(self):

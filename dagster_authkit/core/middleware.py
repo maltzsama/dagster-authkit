@@ -2,9 +2,12 @@
 Authentication Middleware — Pure ASGI (not BaseHTTPMiddleware).
 
 Why pure ASGI:
+
 - BaseHTTPMiddleware only handles scope["type"] == "http", so WebSocket
   connections (Dagster GraphQL subscriptions at /graphql) bypass auth entirely.
+
 - Pure ASGI intercepts both HTTP and WebSocket scopes.
+
 - Also solves the CORS ordering problem: as a pure ASGI middleware we sit at the
   right layer regardless of insert position.
 """
@@ -18,7 +21,12 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from dagster_authkit.api.health import health_endpoint, metrics_endpoint, track_rbac_decision
+from dagster_authkit.api.health import (
+    health_endpoint,
+    metrics_endpoint,
+    track_rbac_decision,
+    track_request_duration,
+)
 from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
@@ -41,13 +49,15 @@ class DagsterAuthMiddleware:
     subscriptions at /graphql are authenticated via session cookie.
     """
 
-    PUBLIC_PATHS: frozenset[str] = frozenset({
-        "/auth/login",
-        "/auth/logout",
-        "/auth/process",
-        "/auth/health",
-        "/auth/metrics",
-    })
+    PUBLIC_PATHS: frozenset[str] = frozenset(
+        {
+            "/auth/login",
+            "/auth/logout",
+            "/auth/process",
+            "/auth/health",
+            "/auth/metrics",
+        }
+    )
 
     PUBLIC_PREFIXES: tuple[str, ...] = (
         "/auth/",
@@ -120,7 +130,13 @@ class DagsterAuthMiddleware:
 
         if not user:
             logger.warning(f"WebSocket auth failed for {path}")
-            await send({"type": "websocket.close", "code": _WS_CLOSE_UNAUTHORIZED, "reason": "Unauthorized"})
+            await send(
+                {
+                    "type": "websocket.close",
+                    "code": _WS_CLOSE_UNAUTHORIZED,
+                    "reason": "Unauthorized",
+                }
+            )
             return
 
         logger.debug(f"WebSocket authenticated: {user.username} on {path}")
@@ -131,6 +147,7 @@ class DagsterAuthMiddleware:
     # ================================================================
 
     async def _handle_http(self, scope: Scope, receive: Receive, send: Send) -> None:
+        send = self._inject_headers_send(send)
         request = Request(scope, receive)
         path = request.url.path
         method = request.method
@@ -152,7 +169,7 @@ class DagsterAuthMiddleware:
         if self.is_proxy_mode and path in ["/auth/login", "/auth/process"]:
             response = Response(
                 content="This endpoint is disabled in proxy auth mode. "
-                        "Authentication is handled by Authelia.",
+                "Authentication is handled by Authelia.",
                 status_code=404,
             )
             await response(scope, receive, send)
@@ -183,7 +200,10 @@ class DagsterAuthMiddleware:
         else:
             user = self._get_authenticated_user(request)
             if not user:
-                if path == "/graphql" or request.headers.get("x-requested-with") == "XMLHttpRequest":
+                if (
+                    path == "/graphql"
+                    or request.headers.get("x-requested-with") == "XMLHttpRequest"
+                ):
                     response = Response(content="Unauthorized", status_code=401)
                 else:
                     response = RedirectResponse(url=f"/auth/login?next={path}", status_code=302)
@@ -197,6 +217,18 @@ class DagsterAuthMiddleware:
             body = await request.body()
             graphql_data = self._parse_json(body)
             queries = self._normalize_graphql_items(graphql_data)
+
+            if not queries and graphql_data:
+                logger.warning(
+                    f"Rejected GraphQL batch with invalid items from {user.username}"
+                )
+                response = Response(
+                    content='{"errors":[{"message":"Invalid GraphQL request format"}]}',
+                    status_code=400,
+                    media_type="application/json",
+                )
+                await response(scope, receive, send)
+                return
 
             for g_item in queries:
                 query_str = g_item.get("query", "")
@@ -222,18 +254,21 @@ class DagsterAuthMiddleware:
 
                 for mutation_name in mutation_names:
                     required_role = RolePermissions.get_required_role(
-                        mutation_name, default_role=self._unknown_mutation_role,
+                        mutation_name,
+                        default_role=self._unknown_mutation_role,
                     )
 
                     if required_role and not user.can(required_role):
                         self._log_denied(user, mutation_name, required_role)
-                        track_rbac_decision(False, user.role.name, mutation_name)
-                        response = self._generate_dagster_error_response(user, mutation_name, required_role)
+                        track_rbac_decision(False, user.role.name)
+                        response = self._generate_dagster_error_response(
+                            user, mutation_name, required_role
+                        )
                         await response(scope, receive, send)
                         return
 
                     if required_role:
-                        track_rbac_decision(True, user.role.name, mutation_name)
+                        track_rbac_decision(True, user.role.name)
 
             # Rebuild receive with consumed body so downstream can read it
             async def _receive():
@@ -243,8 +278,11 @@ class DagsterAuthMiddleware:
 
         elif method in self.WRITE_METHODS and not user.can(self._rest_write_role):
             self._log_denied(
-                user, f"REST {method} {path}", self._rest_write_role,
-                method=method, path=path,
+                user,
+                f"REST {method} {path}",
+                self._rest_write_role,
+                method=method,
+                path=path,
             )
             response = self._forbidden_html_response(
                 user, path, method, f"REQUIRES_{self._rest_write_role.name}"
@@ -269,22 +307,15 @@ class DagsterAuthMiddleware:
         await self._passthrough(scope, downstream_receive, send)
 
     async def _passthrough(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Pass the request to the inner app, injecting security headers on the response."""
-
-        async def _send(message):
-            if message["type"] == "http.response.start":
-                headers = dict(
-                    (k.decode("latin-1"), v.decode("latin-1"))
-                    for k, v in message.get("headers", [])
-                )
-                headers.update(SecurityHardening.get_security_headers())
-                message["headers"] = [
-                    (k.encode("latin-1"), v.encode("latin-1"))
-                    for k, v in headers.items()
-                ]
-            await send(message)
-
-        await self.app(scope, receive, _send)
+        """Pass the request to the inner app. send is already wrapped with security headers."""
+        import time
+        start = time.monotonic()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            duration = time.monotonic() - start
+            path = scope.get("path", "unknown")
+            track_request_duration(path, duration)
 
     # ================================================================
     # User extraction (HTTP)
@@ -311,7 +342,7 @@ class DagsterAuthMiddleware:
         try:
             return AuthUser.from_dict(user_data)
         except Exception as e:
-            logger.error(f"User deserialization failed: {e}")
+            logger.error(f"User deserialization failed: {e}", exc_info=True)
             return None
 
     # ================================================================
@@ -339,7 +370,7 @@ class DagsterAuthMiddleware:
         try:
             return AuthUser.from_dict(user_data)
         except Exception as e:
-            logger.error(f"User deserialization failed: {e}")
+            logger.error(f"User deserialization failed: {e}", exc_info=True)
             return None
 
     @staticmethod
@@ -364,9 +395,7 @@ class DagsterAuthMiddleware:
     # ================================================================
 
     def _is_public_path(self, path: str) -> bool:
-        return path in self.PUBLIC_PATHS or any(
-            path.startswith(p) for p in self.PUBLIC_PREFIXES
-        )
+        return path in self.PUBLIC_PATHS or any(path.startswith(p) for p in self.PUBLIC_PREFIXES)
 
     def _is_request_from_trusted_proxy(self, request: Request) -> bool:
         trusted = config.DAGSTER_AUTH_PROXY_TRUSTED_IPS
@@ -381,8 +410,8 @@ class DagsterAuthMiddleware:
         is_trusted = client_ip in trusted
         if not is_trusted:
             logger.warning(
-                f"Rejected proxy auth from untrusted IP: {client_ip} "
-                f"(trusted: {sorted(trusted)})"
+                "Rejected proxy auth from untrusted IP: %s",
+                client_ip.replace("\n", "_").replace("\r", "_") if client_ip else None,
             )
         return is_trusted
 
@@ -430,6 +459,24 @@ class DagsterAuthMiddleware:
             "errors": [{"message": f"Access Denied: {role.name} required", "path": [mutation]}],
         }
         return Response(content=json.dumps(payload), status_code=200, media_type="application/json")
+
+    @staticmethod
+    def _inject_headers_send(send: Send) -> Send:
+        """Wrap an ASGI send callable to inject security headers on responses."""
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                headers = dict(
+                    (k.decode("latin-1"), v.decode("latin-1"))
+                    for k, v in message.get("headers", [])
+                )
+                headers.update(SecurityHardening.get_security_headers())
+                message["headers"] = [
+                    (k.encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
+                ]
+            await send(message)
+
+        return _send
 
     @staticmethod
     def _forbidden_html_response(user: AuthUser, path: str, method: str, reason: str) -> Response:

@@ -145,7 +145,7 @@ class SecurityHardening:
             "Content-Security-Policy": (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline'; "  # Dagster needs inline scripts
-                "worker-src 'self' blob:; " # Dagster graph layout uses blob: workers
+                "worker-src 'self' blob:; "  # Dagster graph layout uses blob: workers
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "  # Dagster needs inline styles
                 "img-src 'self' data:; "
                 "font-src 'self' data: https://cdn.jsdelivr.net; "
@@ -249,7 +249,14 @@ class SecurityHardening:
 
             elif password_hash.startswith("pbkdf2:"):
                 # PBKDF2 fallback
-                _, algo, salt_hex, stored_hash = password_hash.split(":")
+                parts = password_hash.split(":")
+                if len(parts) != 4:
+                    logger.error(
+                        "Invalid PBKDF2 hash format (expected 4 parts): %s",
+                        password_hash[:20],
+                    )
+                    return False
+                _, algo, salt_hex, stored_hash = parts
                 salt = bytes.fromhex(salt_hex)
 
                 computed_hash = hashlib.pbkdf2_hmac(

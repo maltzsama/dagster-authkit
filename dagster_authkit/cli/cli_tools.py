@@ -182,12 +182,10 @@ def list_users_command(args):
     print("-" * 70)
 
     for u in users:
-        # Resolve role name from value
-        role_name = (
-            Role(u.role_value).name
-            if u.role_value in [r.value for r in Role]
-            else str(u.role_value)
-        )
+        try:
+            role_name = Role(u.role_value).name
+        except ValueError:
+            role_name = str(u.role_value)
         status = "Active" if u.is_active else "Disabled"
         print(f"{u.username:<20} {role_name:<12} {status:<10} {u.full_name or 'N/A':<25}")
 
@@ -249,6 +247,33 @@ def list_permissions_command(args):
     return 0
 
 
+def change_role_command(args):
+    """Change role of an existing user.
+
+    Args:
+        args: ``argparse.Namespace`` with ``username``, ``new_role``,
+              and optional ``db_path``.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
+    backend = _get_backend(args.db_path)
+    role_name = args.new_role.upper()
+
+    try:
+        new_role = Role[role_name]
+    except KeyError:
+        print(f"❌ Invalid role: {role_name}. Valid roles: ADMIN, EDITOR, LAUNCHER, VIEWER")
+        return 1
+
+    if backend.change_role(args.username, new_role, performed_by="cli"):
+        print(f"✅ Role for '{args.username}' changed to {new_role.name}")
+        return 0
+    else:
+        print(f"❌ User '{args.username}' not found")
+        return 1
+
+
 def setup_cli_parser(subparsers):
     """Setup CLI argument parsers for all commands."""
 
@@ -296,3 +321,10 @@ def setup_cli_parser(subparsers):
     # list-permissions
     p_perm = subparsers.add_parser("list-permissions", help="View RBAC matrix")
     p_perm.set_defaults(func=list_permissions_command)
+
+    # change-role
+    p_role = subparsers.add_parser("change-role", help="Change a user's role")
+    p_role.add_argument("username", help="Username")
+    p_role.add_argument("new_role", help="New role (ADMIN, EDITOR, LAUNCHER, VIEWER)")
+    p_role.add_argument("--db-path", help="Database path or DSN")
+    p_role.set_defaults(func=change_role_command)

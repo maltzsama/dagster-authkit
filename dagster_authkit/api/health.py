@@ -129,11 +129,14 @@ def track_session_created():
     _metrics.increment_counter("auth_sessions_created_total")
 
 
-def track_rbac_decision(allowed: bool, role: str, action: str):
-    """Tracks RBAC decision."""
+def track_rbac_decision(allowed: bool, role: str):
+    """Tracks RBAC decision.
+    Note: action is intentionally omitted from metric labels to prevent
+    unbounded label cardinality (memory DoS via arbitrary mutation names).
+    """
     status = "allowed" if allowed else "denied"
     _metrics.increment_counter(
-        "auth_rbac_decisions_total", {"status": status, "role": role, "action": action}
+        "auth_rbac_decisions_total", {"status": status, "role": role}
     )
 
 
@@ -250,12 +253,20 @@ async def metrics_endpoint(request):
     - Histograms (request duration with min/max/avg)
     - Uptime in seconds
 
-    Note:
-        In production, restrict access to this endpoint via IP allowlist
-        or admin token. For distributed deployments, replace with Prometheus/StatsD.
+    If ``DAGSTER_AUTH_METRICS_TOKEN`` is configured, the request must
+    include a ``?token=...`` query parameter or ``X-Metrics-Token``
+    header matching that value.
 
     Returns:
         ``JSONResponse`` with all collected metrics.
     """
+    from dagster_authkit.utils.config import config
+
+    if config.METRICS_TOKEN:
+        from dagster_authkit.auth.security import SecurityHardening
+        token = request.query_params.get("token") or request.headers.get("x-metrics-token", "")
+        if not SecurityHardening.constant_time_compare(token, config.METRICS_TOKEN):
+            return JSONResponse({"error": "Forbidden"}, status_code=403)
+
     metrics = _metrics.get_metrics()
     return JSONResponse(metrics)
