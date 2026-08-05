@@ -127,7 +127,7 @@ def verify_dagster_api_compatibility() -> Tuple[bool, Optional[str]]:
 
         # Verify the Middleware constructor accepts the expected signature
         mw = Middleware(lambda app: app)
-        if mw.func is None:
+        if mw.cls is None:
             return False, "Starlette Middleware constructor returned unexpected type"
     except Exception as e:
         return False, f"Starlette middleware API incompatible: {e}"

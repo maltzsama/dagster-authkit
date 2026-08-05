@@ -10,7 +10,7 @@ def _mock_starlette_middleware(monkeypatch):
     Mock it so the compatibility check passes (or fails predictably)."""
     import starlette.middleware
     mw_instance = MagicMock()
-    mw_instance.func = object()
+    mw_instance.cls = object()
     monkeypatch.setattr(
         starlette.middleware, "Middleware",
         lambda *args, **kwargs: mw_instance,
@@ -87,6 +87,26 @@ class TestVerifyCompatibility:
             ok, err = verify_dagster_api_compatibility()
             assert ok is False
             assert "Starlette middleware" in err
+
+    def test_starlette_middleware_cls_supported(self, monkeypatch):
+        """Starlette exposes Middleware.cls (not .func); check must pass."""
+        import starlette.middleware
+        mw_instance = MagicMock()
+        mw_instance.cls = object()
+        monkeypatch.setattr(
+            starlette.middleware, "Middleware",
+            lambda *args, **kwargs: mw_instance,
+        )
+
+        with (
+            patch("dagster_webserver.webserver.DagsterWebserver") as ws_cls,
+        ):
+            ws_cls.build_middleware = MagicMock()
+            ws_cls.build_routes = MagicMock()
+
+            ok, err = verify_dagster_api_compatibility()
+        assert ok is True
+        assert err is None
 
 
 # ── get_compatibility_report ──────────────────────────────────────────────
