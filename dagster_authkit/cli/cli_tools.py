@@ -266,7 +266,7 @@ def change_role_command(args):
         print(f"❌ Invalid role: {role_name}. Valid roles: ADMIN, EDITOR, LAUNCHER, VIEWER")
         return 1
 
-    if backend.change_role(args.username, new_role):
+    if backend.change_role(args.username, new_role, performed_by="cli"):
         print(f"✅ Role for '{args.username}' changed to {new_role.name}")
         return 0
     else:
