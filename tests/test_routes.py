@@ -4,6 +4,7 @@ Tests for dagster_authkit/api/routes.py
 Covers:
 - CSRF double-submit cookie pattern
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -55,9 +56,7 @@ class TestCsrfDoubleSubmit:
         response = await login_page(request)
 
         cookie_headers = response.headers.getlist("set-cookie")
-        csrf_cookie = next(
-            (h for h in cookie_headers if h.startswith("csrf_token=")), None
-        )
+        csrf_cookie = next((h for h in cookie_headers if h.startswith("csrf_token=")), None)
         assert csrf_cookie is not None, "Response must set csrf_token cookie"
         assert "HttpOnly" in csrf_cookie
         assert "SameSite=lax" in csrf_cookie or "SameSite=Lax" in csrf_cookie
@@ -73,15 +72,49 @@ class TestCsrfDoubleSubmit:
         response = await login_page(request)
 
         cookie_headers = response.headers.getlist("set-cookie")
-        csrf_cookie = next(
-            (h for h in cookie_headers if h.startswith("csrf_token=")), ""
-        )
+        csrf_cookie = next((h for h in cookie_headers if h.startswith("csrf_token=")), "")
         cookie_value = csrf_cookie.split(";")[0].split("=", 1)[1]
 
         body = response.body.decode("utf-8")
-        assert f'value="{cookie_value}"' in body, (
-            "Form token must match cookie value"
-        )
+        assert f'value="{cookie_value}"' in body, "Form token must match cookie value"
+
+    @pytest.mark.asyncio
+    async def test_login_page_reuses_valid_existing_csrf_cookie(self):
+        """A still-valid existing csrf_token cookie must not be rotated
+        otherwise an incidental request to a protected path (e.g. the
+        browser's automatic /favicon.ico call, redirected to /auth/login by
+        DagsterAuthMiddleware) silently breaks a login form already open in
+        the user's browser."""
+        from dagster_authkit.api.routes import login_page
+
+        existing_token = _generate_csrf_token()
+        request = MagicMock()
+        request.query_params.get.return_value = "/"
+        request.cookies = {"csrf_token": existing_token}
+
+        response = await login_page(request)
+
+        cookie_headers = response.headers.getlist("set-cookie")
+        csrf_cookie = next((h for h in cookie_headers if h.startswith("csrf_token=")), None)
+        assert csrf_cookie is None, "Must not rotate a still-valid csrf_token cookie"
+
+        body = response.body.decode("utf-8")
+        assert f'value="{existing_token}"' in body, "Form must reuse the existing cookie's token"
+
+    @pytest.mark.asyncio
+    async def test_login_page_rotates_invalid_existing_csrf_cookie(self):
+        """An expired/malformed existing cookie must still be safely replaced."""
+        from dagster_authkit.api.routes import login_page
+
+        request = MagicMock()
+        request.query_params.get.return_value = "/"
+        request.cookies = {"csrf_token": "not-a-valid-token"}
+
+        response = await login_page(request)
+
+        cookie_headers = response.headers.getlist("set-cookie")
+        csrf_cookie = next((h for h in cookie_headers if h.startswith("csrf_token=")), None)
+        assert csrf_cookie is not None, "Must mint a fresh token when the existing one is invalid"
 
     @pytest.mark.asyncio
     async def test_process_login_rejects_mismatched_cookie(self):
