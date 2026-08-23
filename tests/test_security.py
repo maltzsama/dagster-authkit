@@ -13,8 +13,6 @@ Covers:
 
 import re
 
-import pytest
-
 from dagster_authkit.auth.security import SecurityHardening
 
 

@@ -17,7 +17,6 @@ from dagster_authkit.auth.backends.base import (
     RolePermissions,
 )
 
-
 # ============================================================
 # Role Enum Tests
 # ============================================================

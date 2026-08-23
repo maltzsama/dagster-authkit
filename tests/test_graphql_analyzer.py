@@ -8,7 +8,6 @@ Covers:
 - Invalid/unparseable query handling
 """
 
-import pytest
 
 from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer
 

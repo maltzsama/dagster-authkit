@@ -167,7 +167,6 @@ class TestCookieBackendVersioning:
 
     def test_current_version_cached(self, monkeypatch):
         """Version should be cached within TTL."""
-        mock_getter = __import__("unittest.mock", fromlist=["MagicMock"]).MagicMock
         call_count = 0
         version_values = [3, 4]  # different values to verify caching
 

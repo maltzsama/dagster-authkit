@@ -149,7 +149,7 @@ class ProxyAuthBackend(AuthBackend):
             # If no delimiter found, treat as single DN
             if not groups:
                 groups = [groups_raw]
-                logger.debug(f"   Parsed as single LDAP DN")
+                logger.debug("   Parsed as single LDAP DN")
 
         # Strategy 3: Multi-delimiter split
         # Try common delimiters in priority order

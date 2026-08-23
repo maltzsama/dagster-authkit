@@ -27,10 +27,10 @@ from dagster_authkit.api.health import (
     track_rbac_decision,
     track_request_duration,
 )
-from dagster_authkit.auth.backends.base import Role, AuthUser, RolePermissions
+from dagster_authkit.auth.backends.base import AuthUser, Role, RolePermissions
 from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
-from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer, _SENTINEL_UNPARSEABLE
+from dagster_authkit.core.graphql_analyzer import _SENTINEL_UNPARSEABLE, GraphQLMutationAnalyzer
 from dagster_authkit.core.registry import get_backend
 from dagster_authkit.utils.audit import log_access_control
 from dagster_authkit.utils.config import config

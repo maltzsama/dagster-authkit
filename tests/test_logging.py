@@ -8,8 +8,6 @@ Covers:
 
 import logging
 
-import pytest
-
 from dagster_authkit.utils.logging import setup_logging
 
 
@@ -35,6 +33,7 @@ class TestSetupLogging:
         """LOG_LEVEL from config should be applied."""
         monkeypatch.setenv("DAGSTER_AUTH_LOG_LEVEL", "DEBUG")
         from importlib import reload
+
         from dagster_authkit.utils import config
         reload(config)
         from dagster_authkit.utils import logging as log_mod

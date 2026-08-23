@@ -13,8 +13,6 @@ Covers:
 
 import html
 
-import pytest
-
 from dagster_authkit.auth.backends.base import AuthUser, Role
 from dagster_authkit.utils.templates import (
     render_403_page,

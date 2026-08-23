@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from dagster_authkit.api.routes import _validate_csrf_token, _generate_csrf_token
+from dagster_authkit.api.routes import _generate_csrf_token, _validate_csrf_token
 
 
 class TestCsrfDoubleSubmit:

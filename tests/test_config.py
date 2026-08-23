@@ -142,7 +142,7 @@ class TestAuthConfigSecretKey:
         monkeypatch.setenv("DAGSTER_AUTH_ENV", "development")
         monkeypatch.delenv("DAGSTER_AUTH_SECRET_KEY", raising=False)
         with caplog.at_level("WARNING"):
-            cfg = AuthConfig()
+            AuthConfig()
         assert any(
             "auto-generated SECRET_KEY" in msg for msg in caplog.messages
         ), "Warning about auto-generated key must be logged"

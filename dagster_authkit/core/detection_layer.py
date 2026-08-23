@@ -36,7 +36,6 @@ def verify_dagster_api_compatibility() -> Tuple[bool, Optional[str]]:
     """
     try:
         import dagster
-        import dagster_webserver
         import dagster_webserver.webserver as webserver_module
 
     except ImportError as e:

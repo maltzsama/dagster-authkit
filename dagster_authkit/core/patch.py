@@ -35,6 +35,7 @@ def apply_patches() -> None:
     """Apply all monkey-patches to Dagster webserver. Idempotent."""
     import dagster_webserver.webserver as webserver_module
     from starlette.middleware import Middleware
+
     from .middleware import DagsterAuthMiddleware
 
     if getattr(webserver_module.DagsterWebserver, "_authkit_patched", False):
@@ -57,7 +58,7 @@ def apply_patches() -> None:
         webserver_module.DagsterWebserver.build_middleware = patched_build_middleware
         logger.info("Middleware patched")
     except Exception as e:
-        logger.error(f"Middleware patch failed: {e}")
+        logger.exception(f"Middleware patch failed: {e}")
         raise
 
     # PATCH 2: Routes
@@ -79,7 +80,7 @@ def apply_patches() -> None:
         webserver_module.DagsterWebserver.build_routes = patched_build_routes
         logger.info("Routes patched")
     except Exception as e:
-        logger.error(f"Routes patch failed: {e}")
+        logger.exception(f"Routes patch failed: {e}")
         raise
 
     # PATCH 3: UI Injection (async-aware, resilient)
@@ -98,7 +99,7 @@ def apply_patches() -> None:
         webserver_module.DagsterWebserver.index_html_endpoint = patched_index_html
         logger.info("Resilient UI injection patched")
     except Exception as e:
-        logger.error(f"UI patch failed: {e}")
+        logger.exception(f"UI patch failed: {e}")
         raise
 
     # Mark as patched to prevent re-application

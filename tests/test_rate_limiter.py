@@ -219,10 +219,6 @@ class TestInMemoryRateLimiterOOM:
         _, count = limiter.is_rate_limited("user", max_attempts=5, window_seconds=window)
         assert count == 0
 
-
-class TestRateLimiterOrchestrator:
-    """Verifies the RateLimiter facade with enabled/disabled modes."""
-
     def test_disabled_mode(self):
         """When disabled, rate limiter should never block."""
         rl = RateLimiter(max_attempts=3, window_seconds=300, enabled=False)
