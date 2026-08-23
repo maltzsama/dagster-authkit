@@ -92,20 +92,32 @@ async def login_page(request: Request) -> Response:
 
     error = request.query_params.get("error", "")
 
-    # Generate signed CSRF token (stateless, works across pods)
-    csrf_token = _generate_csrf_token()
+    # Reuse an existing, still-valid CSRF cookie rather than always minting a
+    # new one. Without this, any incidental request to a protected path while
+    # the login page is open (like a browser's automatic /favicon.ico call)
+    # silently rotates the cookie and invalidates the token
+    # already embedded in the visible login form. The user then gets
+    # "CSRF validation failed" on submit despite doing nothing wrong.
+    existing_cookie = request.cookies.get("csrf_token")
+    if existing_cookie is not None and _validate_csrf_token(existing_cookie):
+        csrf_token = existing_cookie
+        needs_cookie = False
+    else:
+        csrf_token = _generate_csrf_token()
+        needs_cookie = True
 
     html = render_login_page(next_url, error, csrf_token)
 
     response = HTMLResponse(content=html)
-    response.set_cookie(
-        key="csrf_token",
-        value=csrf_token,
-        max_age=_CSRF_MAX_AGE,
-        httponly=True,
-        secure=config.SESSION_COOKIE_SECURE,
-        samesite="lax",
-    )
+    if needs_cookie:
+        response.set_cookie(
+            key="csrf_token",
+            value=csrf_token,
+            max_age=_CSRF_MAX_AGE,
+            httponly=True,
+            secure=config.SESSION_COOKIE_SECURE,
+            samesite="lax",
+        )
     return response
 
 
