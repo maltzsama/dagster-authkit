@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- version list -->
 
+## v1.0.1 (2026-08-23)
+
+### Bug Fixes
+
+- Update PyPI badges in README
+  ([`be48181`](https://github.com/maltzsama/dagster-authkit/commit/be48181a1e521e47ce461766a43f4644c4fe4e39))
+
+- Update upload-artifact to v5 to resolve Node 20 deprecation
+  ([`9134fe4`](https://github.com/maltzsama/dagster-authkit/commit/9134fe4a6d748e758a36a7bda5598aa7b3dd3086))
+
+### Chores
+
+- Update tooling config for Ruff and Black
+  ([`0e370c1`](https://github.com/maltzsama/dagster-authkit/commit/0e370c166f5e11f869ce88b24d813806f1d5adde))
+
+### Continuous Integration
+
+- Gate releases and consolidate publish workflow
+  ([`513d7d4`](https://github.com/maltzsama/dagster-authkit/commit/513d7d4e080f57546658de33a472de6918499b60))
+
+### Documentation
+
+- Enable automated CHANGELOG and backfill v1.0.0 release notes
+  ([`317a10f`](https://github.com/maltzsama/dagster-authkit/commit/317a10f7857abf6a93399ed68931e22b24f1e86d))
+
+### Refactoring
+
+- Apply linting fixes across codebase
+  ([`4c26242`](https://github.com/maltzsama/dagster-authkit/commit/4c26242c917b52205ee09f2a50f9cdfea379c4c6))
+
+- Clean up unused imports in tests
+  ([`b299639`](https://github.com/maltzsama/dagster-authkit/commit/b299639fdaefe20c718e6e29aee0e380df8ce288))
+
+- Remove unused imports and fix import ordering
+  ([`23a5d8e`](https://github.com/maltzsama/dagster-authkit/commit/23a5d8e0f6c967d83d67a8877216452a586f7e8b))
+
+
 ## [1.0.0] - 2026-08-05
 
 ### Features
