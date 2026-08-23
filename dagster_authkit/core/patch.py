@@ -15,7 +15,6 @@ import inspect
 import json
 import logging
 import re
-from typing import Optional
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse

@@ -16,10 +16,10 @@ Public API:
 
 import json
 import logging
-import sys
 import os
+import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 audit_logger = logging.getLogger("dagster_authkit.audit")
 audit_logger.propagate = False

@@ -9,7 +9,7 @@ Main orchestrator that:
 """
 
 import sys
-import logging
+
 from dagster_authkit.core.detection_layer import verify_dagster_api_compatibility
 from dagster_authkit.core.patch import apply_patches, verify_patches
 from dagster_authkit.utils.config import config

@@ -28,8 +28,7 @@ If DAGSTER_AUTH_PROXY_GROUP_PATTERN is not set, falls back to simple matching:
 
 import logging
 from typing import Any, Dict, List, Optional
-import json
-import re
+
 from dagster_authkit.auth.backends.base import AuthBackend, AuthUser, Role
 
 logger = logging.getLogger(__name__)

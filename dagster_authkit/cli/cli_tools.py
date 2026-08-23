@@ -5,8 +5,6 @@ Supports unified SQL backends (SQLite, PostgreSQL, MySQL).
 
 import argparse
 import getpass
-import sys
-from pathlib import Path
 from typing import Optional
 
 from dagster_authkit.auth.backends.base import Role
