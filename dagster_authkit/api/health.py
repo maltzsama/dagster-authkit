@@ -148,7 +148,7 @@ def _check_db_connection(backend) -> bool:
         backend.db.execute_sql("SELECT 1")
         return True
     except Exception as e:
-        logger.error(f"Health check DB ping failed: {e}")
+        logger.exception(f"Health check DB ping failed: {e}")
         return False
 
 

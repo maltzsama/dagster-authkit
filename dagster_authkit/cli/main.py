@@ -9,7 +9,7 @@ Main orchestrator that:
 """
 
 import sys
-import logging
+
 from dagster_authkit.core.detection_layer import verify_dagster_api_compatibility
 from dagster_authkit.core.patch import apply_patches, verify_patches
 from dagster_authkit.utils.config import config
@@ -59,7 +59,7 @@ def main():
 
             sys.exit(handle_user_management())
         except Exception as e:
-            logger.error(f"❌ Failed to execute management command: {e}")
+            logger.exception(f"❌ Failed to execute management command: {e}")
             sys.exit(1)
 
     # 3. Server Mode: Startup Display
@@ -124,7 +124,7 @@ def main():
             dagster_cli_main = dagit_main
             logger.debug("Using 'dagit.cli' (legacy)")
         except ImportError:
-            logger.error("CRITICAL: Dagster webserver CLI not found!")
+            logger.exception("CRITICAL: Dagster webserver CLI not found!")
             print("\n" + "!" * 60)
             print("Make sure you have Dagster installed:")
             print("    pip install dagster dagster-webserver")
@@ -141,7 +141,7 @@ def main():
         dagster_cli_main()
     except SystemExit as e:
         if e.code == 2:
-            logger.error("❌ Dagster webserver failed: Missing arguments.")
+            logger.exception("❌ Dagster webserver failed: Missing arguments.")
             print("\n" + "!" * 60)
             print("ERROR: You must provide a workspace or a module to load.")
             print("Example: dagster-authkit -m your_package.definitions")

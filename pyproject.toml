@@ -114,10 +114,12 @@ include = ["dagster_authkit*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py310', 'py311', 'py312']
+target-version = ['py310', 'py311', 'py312', 'py313', 'py314']
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "TRY400", "LOG007"]
 ignore = ["E501"]
 
@@ -135,3 +137,4 @@ insertion_flag = "<!-- version list -->"
 [tool.semantic_release.changelog.default_templates]
 changelog_file = "CHANGELOG.md"
 output_format = "md"
+

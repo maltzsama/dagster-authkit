@@ -8,7 +8,7 @@ Includes Role hierarchy, AuthUser dataclass, and audit helpers.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 # ========================================
 # ROLE HIERARCHY (Dagster+ Compatible)
@@ -38,9 +38,6 @@ class Role(IntEnum):
 # ========================================
 # Role Permissions (RBAC)
 # ========================================
-
-from typing import Optional, Set
-
 
 class RolePermissions:
     """

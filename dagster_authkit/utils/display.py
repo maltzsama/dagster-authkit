@@ -48,7 +48,7 @@ def show_security_banner(admin_pw: str):
     print("\n" + "╔" + "═" * (width - 2) + "╗")
     print(f"║ {header:^{width - 4}} ║")
     print("╠" + "═" * (width - 2) + "╣")
-    print(f"║  Username: admin" + " " * (width - 20) + "║")
+    print("║  Username: admin" + " " * (width - 20) + "║")
     print(f"║  Password: {admin_pw}" + " " * (width - 13 - len(admin_pw)) + "║")
     print("╠" + "═" * (width - 2) + "╣")
     print(f"║ {'⚠️  SAVE THIS PASSWORD! It will not be shown again.':^{width - 4}} ║")

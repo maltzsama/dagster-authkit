@@ -12,7 +12,7 @@ Covers:
 
 import pytest
 
-from dagster_authkit.auth.backends.base import AuthUser, Role
+from dagster_authkit.auth.backends.base import Role
 from dagster_authkit.auth.backends.sql import PeeweeAuthBackend, UserTable
 
 
@@ -57,7 +57,7 @@ class TestPeeweeAuthBackendInitialization:
     def test_admin_bootstrap_idempotent(self, sql_config):
         """Bootstrapping twice should not create a duplicate admin."""
         sql_config["ADMIN_PASSWORD"] = "bootpass"
-        be1 = PeeweeAuthBackend(sql_config)
+        PeeweeAuthBackend(sql_config)
         be2 = PeeweeAuthBackend(sql_config)
         users = be2.list_users()
         assert len(users) == 1

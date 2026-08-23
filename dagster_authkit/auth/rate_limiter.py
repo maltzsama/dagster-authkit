@@ -9,7 +9,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ class RedisRateLimiter(RateLimiterBackend):
 
             return is_limited, attempts
         except Exception as e:
-            logger.error(f"Redis rate limit check failed: {e}")
+            logger.exception(f"Redis rate limit check failed: {e}")
             # Fail-closed: block logins if Redis is unreachable.
             # Legitimate users with an existing session continue unaffected.
             return True, max_attempts
@@ -330,7 +330,7 @@ class RedisRateLimiter(RateLimiterBackend):
 
             return limited, count
         except Exception as e:
-            logger.error(f"Redis rate limit check_and_record failed: {e}")
+            logger.exception(f"Redis rate limit check_and_record failed: {e}")
             return True, max_attempts
 
     def record_attempt(self, identifier: str, window_seconds: int) -> int:
@@ -346,7 +346,7 @@ class RedisRateLimiter(RateLimiterBackend):
             return count
 
         except Exception as e:
-            logger.error(f"Redis rate limit record failed: {e}")
+            logger.exception(f"Redis rate limit record failed: {e}")
             return 0
 
     def reset(self, identifier: str) -> None:
@@ -358,7 +358,7 @@ class RedisRateLimiter(RateLimiterBackend):
             if deleted:
                 logger.debug(f"Rate limit reset: {identifier}")
         except Exception as e:
-            logger.error(f"Redis rate limit reset failed: {e}")
+            logger.exception(f"Redis rate limit reset failed: {e}")
 
 
 # ========================================
@@ -405,10 +405,10 @@ class RateLimiter:
         # Select backend
         if redis_url:
             self.backend = RedisRateLimiter(redis_url)
-            logger.info(f"Rate limiting: DISTRIBUTED (Redis)")
+            logger.info("Rate limiting: DISTRIBUTED (Redis)")
         else:
             self.backend = InMemoryRateLimiter()
-            logger.info(f"Rate limiting: IN-MEMORY (single-pod only)")
+            logger.info("Rate limiting: IN-MEMORY (single-pod only)")
 
         logger.info(
             f"Rate limiter configured: {max_attempts} attempts / {window_seconds}s "

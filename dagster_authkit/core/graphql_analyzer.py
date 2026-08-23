@@ -7,11 +7,11 @@ import logging
 from typing import Optional, Set
 
 from graphql import (
-    parse,
-    OperationDefinitionNode,
     FieldNode,
     FragmentSpreadNode,
     InlineFragmentNode,
+    OperationDefinitionNode,
+    parse,
 )
 from graphql.language.ast import DocumentNode, FragmentDefinitionNode
 

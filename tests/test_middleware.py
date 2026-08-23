@@ -19,7 +19,7 @@ import pytest
 
 from dagster_authkit.auth.backends.base import AuthUser, Role
 from dagster_authkit.auth.security import SecurityHardening
-from dagster_authkit.core.graphql_analyzer import GraphQLMutationAnalyzer, _SENTINEL_UNPARSEABLE
+from dagster_authkit.core.graphql_analyzer import _SENTINEL_UNPARSEABLE, GraphQLMutationAnalyzer
 from dagster_authkit.core.middleware import DagsterAuthMiddleware
 from dagster_authkit.utils.config import config
 
@@ -97,8 +97,8 @@ class TestWebSocket:
     @pytest.mark.asyncio
     async def test_auth_success_session_mode(self):
         """Authenticated WS connection should pass through."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
 
@@ -197,6 +197,7 @@ class TestHTTPRouting:
     async def test_health_endpoint_routed(self):
         """/auth/health should be handled by health_endpoint."""
         from starlette.responses import JSONResponse
+
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         health_called = False
@@ -233,6 +234,7 @@ class TestHTTPRouting:
     async def test_metrics_endpoint_routed(self):
         """/auth/metrics should be handled by metrics_endpoint."""
         from starlette.responses import JSONResponse
+
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         metrics_called = False
@@ -401,9 +403,10 @@ class TestHTTPRouting:
     @pytest.mark.asyncio
     async def test_authenticated_user_stored_in_scope(self):
         """Authenticated user should be stored in scope state."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
-        from dagster_authkit.auth.session import sessions
         from starlette.datastructures import State
+
+        from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         captured_scope = None
 
@@ -438,9 +441,10 @@ class TestHTTPRouting:
     @pytest.mark.asyncio
     async def test_preserves_existing_scope_state(self):
         """Existing scope state dict should be merged into the State object."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
-        from dagster_authkit.auth.session import sessions
         from starlette.datastructures import State
+
+        from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         captured_scope = None
 
@@ -485,8 +489,8 @@ class TestGraphQLRBAC:
     @pytest.mark.asyncio
     async def test_allowed_mutation_passes(self):
         """Mutations allowed by user's role should pass through."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
 
@@ -526,8 +530,8 @@ class TestGraphQLRBAC:
     @pytest.mark.asyncio
     async def test_denied_mutation_blocked(self):
         """Mutations denied by user's role should return error response."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
 
@@ -576,8 +580,8 @@ class TestGraphQLRBAC:
     @pytest.mark.asyncio
     async def test_unparseable_query_blocked(self):
         """Unparseable GraphQL queries should return 400."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
 
@@ -623,8 +627,8 @@ class TestGraphQLRBAC:
     @pytest.mark.asyncio
     async def test_empty_batch_passthrough(self):
         """Query with no mutations should pass through."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
 
@@ -660,8 +664,8 @@ class TestGraphQLRBAC:
     @pytest.mark.asyncio
     async def test_invalid_batch_returns_400(self):
         """Non-dict GraphQL batch item should return 400."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
         sent_messages = []
@@ -708,8 +712,8 @@ class TestRESTRBAC:
     @pytest.mark.asyncio
     async def test_viewer_write_blocked(self):
         """VIEWER should be blocked from POST/PUT/DELETE/PATCH to non-GraphQL paths."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         for method in ("POST", "PUT", "DELETE", "PATCH"):
             app_called = False
@@ -748,8 +752,8 @@ class TestRESTRBAC:
     @pytest.mark.asyncio
     async def test_editor_post_allowed(self):
         """EDITOR should be allowed to POST to non-GraphQL paths."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         app_called = False
 
@@ -780,8 +784,8 @@ class TestRESTRBAC:
     @pytest.mark.asyncio
     async def test_launcher_post_blocked(self):
         """LAUNCHER should be blocked from POST to non-GraphQL paths."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         sent_messages = []
 
@@ -1254,8 +1258,8 @@ class TestTracking:
     @pytest.mark.asyncio
     async def test_rbac_allowed_tracks_decision(self):
         """Allowed mutations should call track_rbac_decision with True."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         async def mock_app(scope, receive, send):
             pass
@@ -1295,9 +1299,8 @@ class TestTracking:
     @pytest.mark.asyncio
     async def test_rbac_denied_tracks_decision(self):
         """Denied mutations should call track_rbac_decision with False."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
-        from dagster_authkit.core.middleware import track_rbac_decision
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         async def mock_app(scope, receive, send):
             pass
@@ -1342,8 +1345,8 @@ class TestTracking:
     @pytest.mark.asyncio
     async def test_rest_denied_logs_access_control(self):
         """Denied REST writes should call log_access_control."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         async def mock_app(scope, receive, send):
             pass
@@ -1379,8 +1382,8 @@ class TestTracking:
     @pytest.mark.asyncio
     async def test_rest_denied_returns_html_forbidden(self):
         """Denied REST writes should return 403 with HTML body."""
-        from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
+        from dagster_authkit.core.middleware import DagsterAuthMiddleware
 
         sent_messages = []
 

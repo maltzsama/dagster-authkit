@@ -81,8 +81,9 @@ class LDAPAuthBackend(AuthBackend):
     def _init_server(self):
         """Initialize LDAP server object."""
         try:
-            from ldap3 import Server, Tls
             import ssl
+
+            from ldap3 import Server, Tls
 
             tls_config = None
             if self.use_tls:
@@ -105,7 +106,7 @@ class LDAPAuthBackend(AuthBackend):
             )
             logger.info(f"LDAP: Server initialized for {self.server_uri}")
         except Exception as e:
-            logger.error(f"LDAP: Failed to initialize server object: {e}")
+            logger.exception(f"LDAP: Failed to initialize server object: {e}")
             raise
 
     def get_name(self) -> str:
@@ -144,7 +145,7 @@ class LDAPAuthBackend(AuthBackend):
             return None
 
         try:
-            from ldap3 import Connection, SAFE_SYNC
+            from ldap3 import SAFE_SYNC, Connection
 
             # Step 1: Find user DN
             user_dn = self._find_user_dn(username)
@@ -182,13 +183,13 @@ class LDAPAuthBackend(AuthBackend):
                 conn.unbind()
 
         except Exception as e:
-            logger.error(f"LDAP: Auth error for '{username}': {e}")
+            logger.exception(f"LDAP: Auth error for '{username}': {e}")
             return None
 
     def get_user(self, username: str) -> Optional[AuthUser]:
         """Fetch user info from LDAP without password check."""
         try:
-            from ldap3 import Connection, SAFE_SYNC
+            from ldap3 import SAFE_SYNC, Connection
 
             user_dn = self._find_user_dn(username)
             if not user_dn:
@@ -212,7 +213,7 @@ class LDAPAuthBackend(AuthBackend):
                 conn.unbind()
 
         except Exception as e:
-            logger.error(f"LDAP: get_user error for '{username}': {e}")
+            logger.exception(f"LDAP: get_user error for '{username}': {e}")
             return None
 
     # ========================================
@@ -221,7 +222,7 @@ class LDAPAuthBackend(AuthBackend):
 
     def _find_user_dn(self, username: str) -> Optional[str]:
         """Search for user DN using service account and tuple unpacking."""
-        from ldap3 import Connection, SAFE_SYNC, SUBTREE
+        from ldap3 import SAFE_SYNC, SUBTREE, Connection
         from ldap3.utils.conv import escape_filter_chars
 
         conn = None
@@ -249,7 +250,7 @@ class LDAPAuthBackend(AuthBackend):
             logger.warning(f"LDAP: User '{username}' not found under base DN.")
             return None
         except Exception as e:
-            logger.error(f"LDAP: Error searching DN for '{username}': {e}")
+            logger.exception(f"LDAP: Error searching DN for '{username}': {e}")
             return None
         finally:
             if conn is not None:
@@ -259,7 +260,7 @@ class LDAPAuthBackend(AuthBackend):
         """Fetch attributes using raw response from SAFE_SYNC tuple.
         If existing_conn is provided, the caller is responsible for cleanup.
         Otherwise, a new connection is created and properly cleaned up."""
-        from ldap3 import Connection, SAFE_SYNC
+        from ldap3 import SAFE_SYNC, Connection
 
         owns_connection = existing_conn is None
         conn = existing_conn
@@ -300,7 +301,7 @@ class LDAPAuthBackend(AuthBackend):
 
             return {}
         except Exception as e:
-            logger.error(f"LDAP: Error fetching attributes for {user_dn}: {e}")
+            logger.exception(f"LDAP: Error fetching attributes for {user_dn}: {e}")
             return {}
         finally:
             if owns_connection and conn is not None:
@@ -354,7 +355,7 @@ class LDAPAuthBackend(AuthBackend):
         Creates its own admin connection for search (users can't search groups).
         """
         try:
-            from ldap3 import Connection, SAFE_SYNC, SUBTREE
+            from ldap3 import SAFE_SYNC, SUBTREE, Connection
 
             admin_conn = Connection(
                 self.server,
@@ -368,7 +369,7 @@ class LDAPAuthBackend(AuthBackend):
                 domain_base = self._get_domain_base_dn()
                 search_filter = f"(|(member={user_dn})(uniqueMember={user_dn}))"
 
-                logger.info(f"LDAP: Manual group search:")
+                logger.info("LDAP: Manual group search:")
                 logger.info(f"  base_dn: {domain_base}")
                 logger.info(f"  filter: {search_filter}")
                 logger.info(f"  user_dn: {user_dn}")
@@ -407,7 +408,7 @@ class LDAPAuthBackend(AuthBackend):
     def list_users(self) -> List[AuthUser]:
         """Iterate through raw response to list users."""
         try:
-            from ldap3 import Connection, SAFE_SYNC
+            from ldap3 import SAFE_SYNC, Connection
 
             conn = Connection(
                 self.server,
@@ -442,7 +443,7 @@ class LDAPAuthBackend(AuthBackend):
             conn.unbind()
             return users
         except Exception as e:
-            logger.error(f"LDAP: Error listing users: {e}")
+            logger.exception(f"LDAP: Error listing users: {e}")
             return []
 
     # ========================================

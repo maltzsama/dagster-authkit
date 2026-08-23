@@ -7,7 +7,6 @@ Covers:
 - show_security_banner output format
 """
 
-import pytest
 
 from dagster_authkit.utils.display import (
     print_banner,

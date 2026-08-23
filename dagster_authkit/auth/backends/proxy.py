@@ -28,8 +28,7 @@ If DAGSTER_AUTH_PROXY_GROUP_PATTERN is not set, falls back to simple matching:
 
 import logging
 from typing import Any, Dict, List, Optional
-import json
-import re
+
 from dagster_authkit.auth.backends.base import AuthBackend, AuthUser, Role
 
 logger = logging.getLogger(__name__)
@@ -150,7 +149,7 @@ class ProxyAuthBackend(AuthBackend):
             # If no delimiter found, treat as single DN
             if not groups:
                 groups = [groups_raw]
-                logger.debug(f"   Parsed as single LDAP DN")
+                logger.debug("   Parsed as single LDAP DN")
 
         # Strategy 3: Multi-delimiter split
         # Try common delimiters in priority order
