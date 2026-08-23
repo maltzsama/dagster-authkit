@@ -5,8 +5,9 @@ Covers:
 - CSRF double-submit cookie pattern
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from dagster_authkit.api.routes import _validate_csrf_token, _generate_csrf_token
 

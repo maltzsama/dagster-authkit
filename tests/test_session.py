@@ -6,7 +6,6 @@ Covers:
 - SessionManager: create, validate, revoke via singleton
 """
 
-import os
 import time
 from unittest.mock import patch
 

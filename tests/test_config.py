@@ -9,8 +9,6 @@ Covers:
 - Sensitive data masking in __repr__
 """
 
-import os
-
 import pytest
 
 from dagster_authkit.utils.config import AuthConfig, config

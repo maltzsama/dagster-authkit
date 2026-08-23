@@ -1297,7 +1297,6 @@ class TestTracking:
         """Denied mutations should call track_rbac_decision with False."""
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
         from dagster_authkit.auth.session import sessions
-        from dagster_authkit.core.middleware import track_rbac_decision
 
         async def mock_app(scope, receive, send):
             pass

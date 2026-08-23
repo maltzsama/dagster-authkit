@@ -12,12 +12,10 @@ that affect Dagster 1.13.8 + Starlette 1.3.1:
            <script> block, leaving the menu invisible despite being in the DOM.
 """
 
-import asyncio
 import json
-import re
 import sys
 import types
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.datastructures import State
@@ -368,7 +366,7 @@ class TestMiddlewareStateAlignment:
         """
         from starlette.datastructures import State
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
-        from dagster_authkit.auth.backends.base import AuthUser, Role
+        from dagster_authkit.auth.backends.base import Role
 
         captured_scope: dict = {}
 
@@ -409,7 +407,6 @@ class TestMiddlewareStateAlignment:
             mock_cfg.DAGSTER_AUTH_REST_WRITE_ROLE = "EDITOR"
 
             # Build a fresh middleware with mocked config
-            from unittest.mock import PropertyMock
             middleware2 = DagsterAuthMiddleware.__new__(DagsterAuthMiddleware)
             middleware2.app = mock_app
             middleware2.is_proxy_mode = True
@@ -615,7 +612,6 @@ class TestSecurityHeaders:
     async def test_options_response_has_security_headers(self):
         """OPTIONS requests must receive security headers."""
         from dagster_authkit.core.middleware import DagsterAuthMiddleware
-        from dagster_authkit.auth.backends.base import Role
 
         sent_messages = []
 

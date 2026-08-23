@@ -12,7 +12,6 @@ Covers:
 import io
 import json
 import logging
-import sys
 
 import pytest
 

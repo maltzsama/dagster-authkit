@@ -12,7 +12,7 @@ Covers:
 
 import pytest
 
-from dagster_authkit.auth.backends.base import AuthUser, Role
+from dagster_authkit.auth.backends.base import Role
 from dagster_authkit.auth.backends.sql import PeeweeAuthBackend, UserTable
 
 
