@@ -5,10 +5,9 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg?logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/Apache-2.0)
 [![Coverage](https://codecov.io/gh/maltzsama/dagster-authkit/branch/main/graph/badge.svg)](https://codecov.io/gh/maltzsama/dagster-authkit)
 [![PyPI Version](https://img.shields.io/pypi/v/dagster-authkit?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/dagster-authkit/)
-[![PyPI Stats](/api/badges/dagster-authkit?type=stars)](/packages/dagster-authkit)
+[![GitHub Repo stars](https://img.shields.io/github/stars/maltzsama/dagster-authkit?style=social)](https://github.com/maltzsama/dagster-authkit)
 [![Downloads](https://img.shields.io/pypi/dm/dagster-authkit?logo=pypi&logoColor=white)](https://pypi.org/project/dagster-authkit/)
-[![PyPI Stats](/api/badges/dagster-authkit?period=total)](/packages/dagster-authkit)
-
+[![Downloads](https://static.pepy.tech/badge/dagster-authkit)](https://pepy.tech/project/dagster-authkit)
 
 **Community authentication wrapper for self-hosted Dagster OSS.**
 
