@@ -193,3 +193,109 @@ class TestPeeweeAuthBackendAuthentication:
         backend.authenticate("loginuser", "pass")
         user_after = UserTable.get(UserTable.username == "loginuser")
         assert user_after.last_login is not None
+
+
+class TestStoredSessionRevocation:
+    """Verifies that session-invalidating operations also clear stateful
+    session stores (Redis), which are not tied to session_version."""
+
+    @pytest.fixture
+    def store(self, monkeypatch):
+        """Stand-in for the global SessionManager."""
+        from unittest.mock import MagicMock
+
+        mock = MagicMock()
+        monkeypatch.setattr("dagster_authkit.auth.session.sessions", mock)
+        return mock
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda be: be.change_password("suser", "newpass"),
+            lambda be: be.change_role("suser", Role.ADMIN),
+            lambda be: be.delete_user("suser"),
+        ],
+        ids=["change_password", "change_role", "delete_user"],
+    )
+    def test_operation_revokes_stored_sessions(self, backend, store, operation):
+        backend.add_user("suser", "pass", Role.VIEWER)
+        store.revoke_all.assert_not_called()
+
+        assert operation(backend) is True
+
+        store.revoke_all.assert_called_once_with("suser")
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda be: be.change_password("ghost", "newpass"),
+            lambda be: be.change_role("ghost", Role.ADMIN),
+            lambda be: be.delete_user("ghost"),
+        ],
+        ids=["change_password", "change_role", "delete_user"],
+    )
+    def test_unknown_user_revokes_nothing(self, backend, store, operation):
+        assert operation(backend) is False
+        store.revoke_all.assert_not_called()
+
+    def test_only_target_user_is_revoked(self, backend, store):
+        backend.add_user("suser", "pass", Role.VIEWER)
+        backend.add_user("other", "pass", Role.VIEWER)
+        backend.change_password("suser", "newpass")
+        assert [c.args for c in store.revoke_all.call_args_list] == [("suser",)]
+
+    def test_db_backed_cookie_sessions_need_no_store_revocation(self, backend, store):
+        """CookieBackend raises NotImplementedError in DB-backed mode; the
+        version bump alone invalidates those sessions."""
+        store.revoke_all.side_effect = NotImplementedError
+        backend.add_user("suser", "pass", Role.VIEWER)
+
+        assert backend.change_password("suser", "newpass") is True
+        assert PeeweeAuthBackend.get_session_version("suser") == 2
+
+    def test_session_module_import_failure_does_not_fail_the_operation(
+        self, backend, monkeypatch, caplog
+    ):
+        """E.g. Redis configured but the redis package missing in a CLI image:
+        building the session manager on first import raises."""
+        import builtins
+
+        real_import = builtins.__import__
+
+        def failing_import(name, *args, **kwargs):
+            if name == "dagster_authkit.auth.session":
+                raise ModuleNotFoundError("No module named 'redis'")
+            return real_import(name, *args, **kwargs)
+
+        backend.add_user("suser", "pass", Role.VIEWER)
+        monkeypatch.setattr(builtins, "__import__", failing_import)
+
+        with caplog.at_level("ERROR"):
+            assert backend.change_password("suser", "newpass") is True
+            assert backend.change_role("suser", Role.ADMIN) is True
+            assert backend.delete_user("suser") is True
+
+        assert PeeweeAuthBackend.get_session_version("suser") == 4
+        assert "Failed to revoke stored sessions for 'suser'" in caplog.text
+
+    def test_store_failure_does_not_fail_the_operation(self, backend, store, caplog):
+        """The change is already committed; a store outage is logged only."""
+        store.revoke_all.side_effect = ConnectionError("redis down")
+        backend.add_user("suser", "pass", Role.VIEWER)
+
+        with caplog.at_level("ERROR"):
+            assert backend.change_password("suser", "newpass") is True
+
+        assert backend.authenticate("suser", "newpass") is not None
+        assert PeeweeAuthBackend.get_session_version("suser") == 2
+        assert "Failed to revoke stored sessions for 'suser'" in caplog.text
+
+    def test_version_is_bumped_before_store_revocation(self, backend, store):
+        """A session created between the two steps must not survive."""
+        seen = []
+        store.revoke_all.side_effect = lambda u: seen.append(
+            PeeweeAuthBackend.get_session_version(u)
+        )
+        backend.add_user("suser", "pass", Role.VIEWER)
+        backend.change_password("suser", "newpass")
+        assert seen == [2]

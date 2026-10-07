@@ -227,6 +227,34 @@ class PeeweeAuthBackend(AuthBackend):
         UserTable.update(session_version=UserTable.session_version + 1).where(
             UserTable.username == username
         ).execute()
+        self._revoke_stored_sessions(username)
+
+    @staticmethod
+    def _revoke_stored_sessions(username: str) -> None:
+        """Drop the user's sessions from a stateful session store (Redis).
+
+        Redis sessions are not tied to session_version, so the bump alone would
+        leave them valid until they expire. Cookie sessions in DB-backed mode
+        need nothing here: they are invalidated by the bump itself.
+
+        Best-effort: the credential/role change is already committed, so a
+        session store failure is logged instead of raised.
+        """
+        try:
+            # Imported here to avoid a circular import; inside the try because
+            # the first import builds the session manager (and may fail too).
+            from dagster_authkit.auth.session import sessions
+
+            sessions.revoke_all(username)
+        except NotImplementedError:
+            pass
+        except Exception as e:
+            logger.error(
+                f"Failed to revoke stored sessions for '{username}': {e}. "
+                "Existing sessions stay valid until they expire.",
+                exc_info=True,
+            )
+
 
     @staticmethod
     def get_session_version(username: str) -> int:

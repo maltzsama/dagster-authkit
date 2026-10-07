@@ -333,3 +333,21 @@ class TestRedisBackend:
         mock_redis.delete.return_value = 3
         result = backend.revoke_all("admin")
         assert result == 3
+
+    def test_revoke_all_deletes_listed_sessions_only(self, backend, mock_redis):
+        """The index key itself is never deleted: a session created while
+        revoke_all runs must stay tracked for the next revocation."""
+        mock_redis.smembers.return_value = {"t1", "t2"}
+        backend.revoke_all("admin")
+
+        deleted = {key for call in mock_redis.delete.call_args_list for key in call.args}
+        assert deleted == {"sess:t1", "sess:t2"}
+        assert mock_redis.srem.call_args.args[0] == "user_sess:admin"
+        assert set(mock_redis.srem.call_args.args[1:]) == {"t1", "t2"}
+
+    def test_revoke_all_without_sessions(self, backend, mock_redis):
+        mock_redis.smembers.return_value = set()
+        assert backend.revoke_all("admin") == 0
+        mock_redis.delete.assert_not_called()
+        mock_redis.srem.assert_not_called()
+
