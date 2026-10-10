@@ -128,7 +128,9 @@ dagster:
   extraArgs: []
   home: /data/dagster_home
 
-# --- Persistence for SQLite (when using SQLite backend) ---
+# --- Persistence for /data (SQLite user database and DAGSTER_HOME) ---
+# When disabled, /data is an emptyDir: users and Dagster state are lost
+# whenever the pod is recreated.
 persistence:
   enabled: true
   size: 1Gi

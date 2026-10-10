@@ -36,10 +36,27 @@ spec:
       serviceAccountName: {{ include "dagster-authkit.fullname" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # Dagster refuses to start unless DAGSTER_HOME already exists, and on a
+        # fresh volume it does not.
+        - name: init-dagster-home
+          image: {{ include "dagster-authkit.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c", "mkdir -p \"$DAGSTER_HOME\""]
+          env:
+            - name: DAGSTER_HOME
+              value: {{ .Values.dagster.home | quote }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ required "image.tag is required — set the exact image version (e.g. --set image.tag=v0.4.2). Falling back to Chart.appVersion would silently use a stale version." .Values.image.tag }}"
+          image: {{ include "dagster-authkit.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           args:
             - -h
             - "0.0.0.0"
@@ -65,6 +82,10 @@ spec:
           env:
             - name: DAGSTER_HOME
               value: {{ .Values.dagster.home | quote }}
+            # The pod user has no home directory and the root filesystem is
+            # read-only; Dagster writes to ~/.dagster.
+            - name: HOME
+              value: /tmp
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -85,18 +106,18 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: /data
-            {{- end }}
             - name: tmp
               mountPath: /tmp
       volumes:
-        {{- if .Values.persistence.enabled }}
         - name: data
+          {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "dagster-authkit.fullname" . }}-data
-        {{- end }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}
