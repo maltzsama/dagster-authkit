@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/maltzsama/dagster-authkit
   pullPolicy: IfNotPresent
-  tag: ""  # REQUIRED — exact image version (e.g. "1.2.0"). Chart fails to render if empty.
+  tag: ""  # Defaults to the chart's appVersion
 
 imagePullSecrets: []
 nameOverride: ""
@@ -19,6 +19,7 @@ serviceAccount:
   name: ""  # Defaults to the release fullname, or to "default" when create=false
 
 podAnnotations: {}
+podLabels: {}
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
@@ -66,6 +67,22 @@ autoscaling:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Extra environment for the webserver container.
+extraEnv: []
+# - name: DAGSTER_PG_PASSWORD
+#   valueFrom:
+#     secretKeyRef:
+#       name: dagster-postgres
+#       key: password
+extraEnvFrom: []
+
+# Extra volumes and mounts for the webserver container (e.g. user code).
+extraVolumes: []
+extraVolumeMounts: []
+
+# Extra init containers, run after the chart's own.
+initContainers: []
 
 # --- Dagster AuthKit Configuration ---
 
@@ -135,12 +152,36 @@ authkit:
     groupPattern: ""
     timeout: 10
 
-# --- Dagster workspace (passed as CLI args) ---
+# --- Dagster ---
 dagster:
+  # What the webserver loads. Set at most one; with none it starts with
+  # --empty-workspace.
   workspace:
-    # Use either module or file
+    # Python module (-m) or file (-f). The code must exist in the image, or be
+    # mounted with extraVolumes.
     module: ""
     file: ""
+    # Inline workspace.yaml (-w), rendered into a ConfigMap. The usual choice on
+    # Kubernetes: point it at gRPC code location servers.
+    content: ""
+    # content: |
+    #   load_from:
+    #     - grpc_server:
+    #         host: my-code-location
+    #         port: 3030
+    #         location_name: my-code-location
+    # Or an existing ConfigMap holding the key "workspace.yaml".
+    existingConfigMap: ""
+
+  # Dagster instance configuration (dagster.yaml), mounted into DAGSTER_HOME.
+  # Without it Dagster stores runs and events in SQLite files under DAGSTER_HOME.
+  # Storage and run launcher plugins (dagster-postgres, dagster-k8s, ...) are not
+  # in the published image: build an image that adds them before referencing them.
+  instance:
+    content: ""
+    # Or an existing ConfigMap holding the key "dagster.yaml".
+    existingConfigMap: ""
+
   extraArgs: []
   home: /data/dagster_home
 

@@ -1,0 +1,29 @@
+# Inline workspace.yaml and dagster.yaml, plus the generic extension points.
+image:
+  repository: dagster-authkit
+  tag: ci
+authkit:
+  secretKey: ci-secret-key-0123456789abcdef
+dagster:
+  workspace:
+    content: |
+      load_from:
+        - grpc_server:
+            host: code-location.invalid
+            port: 3030
+            location_name: example
+  instance:
+    content: |
+      telemetry:
+        enabled: false
+podLabels:
+  team: data
+extraEnv:
+  - name: EXAMPLE_VAR
+    value: example
+extraVolumes:
+  - name: scratch
+    emptyDir: {}
+extraVolumeMounts:
+  - name: scratch
+    mountPath: /scratch

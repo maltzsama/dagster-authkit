@@ -1,3 +1,12 @@
+{{- $workspaceConfigMap := include "dagster-authkit.workspaceConfigMap" . }}
+{{- $instanceConfigMap := include "dagster-authkit.instanceConfigMap" . }}
+{{- $sources := 0 }}
+{{- range (list .Values.dagster.workspace.module .Values.dagster.workspace.file $workspaceConfigMap) }}
+{{- if . }}{{ $sources = add1 $sources }}{{ end }}
+{{- end }}
+{{- if gt $sources 1 }}
+{{- fail "Set at most one of dagster.workspace.module, dagster.workspace.file and dagster.workspace.content/existingConfigMap." }}
+{{- end }}
 {{- if and (contains "sqlite" .Values.authkit.databaseUrl) (or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled) }}
 {{- fail "SQLite cannot be used with replicaCount > 1 or HPA: the database file lives on a single volume and Redis does not share it. Set authkit.databaseUrl to a PostgreSQL/MySQL DSN, or set replicaCount=1 and disable autoscaling." }}
 {{- end }}
@@ -27,6 +36,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/dagster: {{ include (print $.Template.BasePath "/dagster-configmap.yaml") . | sha256sum }}
         {{- if not .Values.authkit.existingSecret }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- end }}
@@ -35,6 +45,9 @@ spec:
         {{- end }}
       labels:
         {{- include "dagster-authkit.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -58,6 +71,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+        {{- with .Values.initContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "dagster-authkit.image" . | quote }}
@@ -75,6 +91,9 @@ spec:
             {{- else if .Values.dagster.workspace.file }}
             - -f
             - {{ .Values.dagster.workspace.file | quote }}
+            {{- else if $workspaceConfigMap }}
+            - -w
+            - /opt/dagster/workspace/workspace.yaml
             {{- else }}
             - --empty-workspace
             {{- end }}
@@ -86,6 +105,9 @@ spec:
                 name: {{ include "dagster-authkit.fullname" . }}-config
             - secretRef:
                 name: {{ .Values.authkit.existingSecret | default (printf "%s-secret" (include "dagster-authkit.fullname" .)) }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: DAGSTER_HOME
               value: {{ .Values.dagster.home | quote }}
@@ -93,6 +115,9 @@ spec:
             # read-only; Dagster writes to ~/.dagster.
             - name: HOME
               value: /tmp
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -121,6 +146,20 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+            {{- if $workspaceConfigMap }}
+            - name: workspace
+              mountPath: /opt/dagster/workspace
+              readOnly: true
+            {{- end }}
+            {{- if $instanceConfigMap }}
+            - name: instance
+              mountPath: {{ printf "%s/dagster.yaml" (.Values.dagster.home | trimSuffix "/") | quote }}
+              subPath: dagster.yaml
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: data
           {{- if .Values.persistence.enabled }}
@@ -131,6 +170,19 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if $workspaceConfigMap }}
+        - name: workspace
+          configMap:
+            name: {{ $workspaceConfigMap }}
+        {{- end }}
+        {{- if $instanceConfigMap }}
+        - name: instance
+          configMap:
+            name: {{ $instanceConfigMap }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

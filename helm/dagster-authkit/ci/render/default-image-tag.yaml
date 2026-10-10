@@ -1,0 +1,4 @@
+# With no tag set, the image tag falls back to the chart's appVersion.
+image:
+  repository: ghcr.io/maltzsama/dagster-authkit
+  tag: ""

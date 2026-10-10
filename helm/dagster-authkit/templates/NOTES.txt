@@ -16,7 +16,7 @@
      kubectl exec deploy/{{ include "dagster-authkit.fullname" . }} -- dagster-authkit add-user admin --admin
 
 3. If you didn't set a workspace, the server starts with --empty-workspace.
-   Set dagster.workspace.module or dagster.workspace.file in your values.
+   Set dagster.workspace.content (workspace.yaml), module or file in your values.
 
 ⚠️  Important:
    - Set authkit.existingSecret to use a pre-created Secret (Vault, External Secrets).
@@ -28,4 +28,12 @@
    - Global session revocation (change_password, change_role, delete_user)
      still works cross-pod via DB-backed session_version.
    - Set authkit.redisUrl for full multi-pod parity.
+{{- end }}
+{{- if and .Values.authkit.cookieSecure (not (and .Values.ingress.enabled .Values.ingress.tls)) }}
+
+⚠️  authkit.cookieSecure=true and this chart's Ingress has no TLS:
+   - Browsers only send the session cookie over HTTPS, so login will not
+     stick over plain HTTP (including kubectl port-forward).
+   - Terminate TLS in front of the service, or set authkit.cookieSecure=false
+     for local testing.
 {{- end }}
