@@ -242,3 +242,87 @@ class TestGlobalConfig:
         ]
         for attr in expected:
             assert hasattr(config, attr), f"Missing config attribute: {attr}"
+
+
+class TestAuthConfigServiceToken:
+    """Service token settings for non-interactive API clients."""
+
+    VALID_TOKEN = "s" * 32
+
+    def test_disabled_by_default(self, monkeypatch):
+        """Service token should be off when the env var is unset."""
+        monkeypatch.delenv("DAGSTER_AUTH_SERVICE_TOKEN", raising=False)
+        cfg = AuthConfig()
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN is None
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN_HEADER == "Dagster-Cloud-Api-Token"
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN_ROLE == "VIEWER"
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN_USER == "service-token"
+
+    def test_empty_token_is_disabled(self, monkeypatch):
+        """An empty env var should not enable the feature."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", "")
+        cfg = AuthConfig()
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN is None
+
+    def test_settings_from_env(self, monkeypatch):
+        """Token, header, role and user should be configurable via env."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", self.VALID_TOKEN)
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_HEADER", "X-Api-Token")
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_ROLE", "launcher")
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_USER", "prometheus")
+        cfg = AuthConfig()
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN == self.VALID_TOKEN
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN_HEADER == "X-Api-Token"
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN_ROLE == "LAUNCHER"
+        assert cfg.DAGSTER_AUTH_SERVICE_TOKEN_USER == "prometheus"
+
+    def test_short_token_raises(self, monkeypatch):
+        """Tokens shorter than 32 characters should be rejected at startup."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", "s" * 31)
+        with pytest.raises(ValueError, match="DAGSTER_AUTH_SERVICE_TOKEN"):
+            AuthConfig()
+
+    def test_invalid_role_raises(self, monkeypatch):
+        """An invalid role should raise ValueError."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_ROLE", "SUPERADMIN")
+        with pytest.raises(ValueError, match="DAGSTER_AUTH_SERVICE_TOKEN_ROLE"):
+            AuthConfig()
+
+    @pytest.mark.parametrize("header", ["X-Tökén", "X Api Token", "X-Token:", "X-Token\r\nEvil"])
+    def test_invalid_header_name_raises(self, monkeypatch, header):
+        """Header names that are not valid HTTP field-names should fail at startup."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_HEADER", header)
+        with pytest.raises(ValueError, match="DAGSTER_AUTH_SERVICE_TOKEN_HEADER"):
+            AuthConfig()
+
+    def test_elevated_role_logs_warning(self, monkeypatch, caplog):
+        """Roles above VIEWER should be flagged at startup."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", self.VALID_TOKEN)
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_ROLE", "ADMIN")
+        with caplog.at_level("WARNING"):
+            AuthConfig()
+        assert "Service token grants ADMIN role" in caplog.text
+
+    def test_viewer_role_logs_no_warning(self, monkeypatch, caplog):
+        """The default VIEWER role should not log a warning."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", self.VALID_TOKEN)
+        with caplog.at_level("WARNING"):
+            AuthConfig()
+        assert "Service token" not in caplog.text
+
+    def test_proxy_backend_logs_ignored_warning(self, monkeypatch, caplog):
+        """Proxy mode does not honour the service token and should say so."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", self.VALID_TOKEN)
+        monkeypatch.setenv("DAGSTER_AUTH_BACKEND", "proxy")
+        monkeypatch.setenv("DAGSTER_AUTH_PROXY_TRUSTED_IPS", "10.0.0.1")
+        with caplog.at_level("WARNING"):
+            AuthConfig()
+        assert "ignored when DAGSTER_AUTH_BACKEND=proxy" in caplog.text
+
+    def test_token_not_in_log(self, monkeypatch, caplog):
+        """The token value must never be logged."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", self.VALID_TOKEN)
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_ROLE", "ADMIN")
+        with caplog.at_level("DEBUG"):
+            AuthConfig()
+        assert self.VALID_TOKEN not in caplog.text

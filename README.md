@@ -200,6 +200,31 @@ We provide **4 levels** of access. Permissions are enforced via GraphQL query an
 | **OpenID Connect**| Header-based | **Experimental** | AuthKit supports OIDC providers (Google, GitHub, Okta, Keycloak) via **Authelia**| 
 ---
 
+## 🤖 Service Token (API clients)
+
+Non-interactive clients that poll `/graphql` (Prometheus exporters, CI scripts) cannot go through the login form. Set a static service token to let them authenticate with a header instead:
+
+```bash
+export DAGSTER_AUTH_SERVICE_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
+```
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `DAGSTER_AUTH_SERVICE_TOKEN` | unset | Shared secret (min 32 chars). Feature is off when unset. |
+| `DAGSTER_AUTH_SERVICE_TOKEN_HEADER` | `Dagster-Cloud-Api-Token` | Header carrying the token. |
+| `DAGSTER_AUTH_SERVICE_TOKEN_ROLE` | `VIEWER` | Role granted to the token. |
+| `DAGSTER_AUTH_SERVICE_TOKEN_USER` | `service-token` | Username shown in audit logs. |
+
+```bash
+curl -H "Dagster-Cloud-Api-Token: $DAGSTER_AUTH_SERVICE_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "{ version }"}' https://dagster.yourcompany.com/graphql
+```
+
+The token goes through the same RBAC as any user, so a `VIEWER` token can run queries but every mutation is denied and audit-logged. It is a static, non-expiring credential: keep it at `VIEWER` unless the client really needs more. Session backends only (ignored in proxy mode); WebSocket subscriptions remain cookie-only.
+
+---
+
 ## 🛠️ CLI Management
 
 Manage users directly from the shell. Useful for CI/CD or admin tasks.
@@ -240,6 +265,7 @@ dagster-authkit list-permissions
 * ✅ Dual rate-limiting (username + IP)
 * ✅ Proxy trusted IP allowlist
 * ✅ Token-protected `/auth/metrics`
+* ✅ Service token for non-interactive API clients
 * ✅ Automated `CHANGELOG.md` generation
 
 ### Next

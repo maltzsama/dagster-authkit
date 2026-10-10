@@ -5,6 +5,7 @@ Covers:
 - WebSocket authentication (public path, failure, success)
 - HTTP routing (health, metrics, public paths, auth redirect, API 401)
 - GraphQL RBAC (mutation allowed, denied, unparseable, invalid batch)
+- Service token (valid, wrong, disabled, RBAC, cookie precedence, WebSocket)
 - REST write RBAC (allowed, denied)
 - Proxy mode (disabled endpoints, trusted proxy, untrusted proxy)
 - Helper methods (_parse_json, _normalize_graphql_items, etc.)
@@ -476,6 +477,192 @@ class TestHTTPRouting:
         assert isinstance(state, State)
         assert state.existing_key == "existing_value"
         assert state.user.username == "admin"
+
+
+# ---------------------------------------------------------------------------
+# Service Token
+# ---------------------------------------------------------------------------
+
+
+class TestServiceToken:
+    """Service token authentication for non-interactive API clients."""
+
+    TOKEN = "t" * 32
+
+    @staticmethod
+    def _scope(headers, method="POST", path="/graphql"):
+        return {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": headers,
+            "query_string": b"",
+            "server": ("localhost", 3000),
+            "client": ("10.0.0.9", 12345),
+        }
+
+    async def _run(self, headers, body=None, method="POST", path="/graphql", token=TOKEN, **cfg):
+        """Run a request through the middleware and return (captured scope, sent messages)."""
+        captured = []
+        sent_messages = []
+
+        async def mock_app(scope, receive, send):
+            captured.append(scope)
+
+        async def send_fn(message):
+            sent_messages.append(message)
+
+        payload = json.dumps(body or {"query": "{ version }"}).encode("utf-8")
+
+        async def receive():
+            return {"type": "http.request", "body": payload, "more_body": False}
+
+        middleware = DagsterAuthMiddleware(mock_app)
+
+        with patch.multiple(config, DAGSTER_AUTH_SERVICE_TOKEN=token, **cfg):
+            await middleware._handle_http(self._scope(headers, method, path), receive, send_fn)
+
+        return (captured[0] if captured else None), sent_messages
+
+    @pytest.mark.asyncio
+    async def test_valid_token_authenticates_query(self):
+        """A valid token should pass queries through as the configured service user."""
+        scope, _ = await self._run([(b"dagster-cloud-api-token", self.TOKEN.encode())])
+
+        assert scope is not None
+        user = scope["state"].user
+        assert user.username == "service-token"
+        assert user.role == Role.VIEWER
+
+    @pytest.mark.asyncio
+    async def test_custom_header_role_and_user(self):
+        """Header name, role and username should follow the configuration."""
+        scope, _ = await self._run(
+            [(b"x-api-token", self.TOKEN.encode())],
+            DAGSTER_AUTH_SERVICE_TOKEN_HEADER="X-Api-Token",
+            DAGSTER_AUTH_SERVICE_TOKEN_ROLE="LAUNCHER",
+            DAGSTER_AUTH_SERVICE_TOKEN_USER="prometheus",
+        )
+
+        assert scope is not None
+        user = scope["state"].user
+        assert user.username == "prometheus"
+        assert user.role == Role.LAUNCHER
+
+    @pytest.mark.asyncio
+    async def test_missing_header_returns_401(self):
+        """Without the header, /graphql should still return 401."""
+        scope, sent_messages = await self._run([])
+
+        assert scope is None
+        assert sent_messages[0]["status"] == 401
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_returns_401_and_audits(self):
+        """A wrong token should be rejected and recorded in the audit log."""
+        with patch("dagster_authkit.core.middleware.log_login_attempt") as mock_audit:
+            scope, sent_messages = await self._run(
+                [(b"dagster-cloud-api-token", b"x" * 32)]
+            )
+
+        assert scope is None
+        assert sent_messages[0]["status"] == 401
+        mock_audit.assert_called_once_with(
+            "service-token", False, "10.0.0.9", "INVALID_SERVICE_TOKEN"
+        )
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_on_page_returns_401_not_redirect(self):
+        """Token clients should get 401 instead of a redirect to the login page."""
+        scope, sent_messages = await self._run(
+            [(b"dagster-cloud-api-token", b"x" * 32)], method="GET", path="/server_info"
+        )
+
+        assert scope is None
+        assert sent_messages[0]["status"] == 401
+
+    @pytest.mark.asyncio
+    async def test_empty_token_returns_401_and_audits(self):
+        """An empty header value is still a presented (invalid) token, not a missing one."""
+        with patch("dagster_authkit.core.middleware.log_login_attempt") as mock_audit:
+            scope, sent_messages = await self._run(
+                [(b"dagster-cloud-api-token", b"")], method="GET", path="/server_info"
+            )
+
+        assert scope is None
+        assert sent_messages[0]["status"] == 401
+        mock_audit.assert_called_once_with(
+            "service-token", False, "10.0.0.9", "INVALID_SERVICE_TOKEN"
+        )
+
+    @pytest.mark.asyncio
+    async def test_header_ignored_when_feature_disabled(self):
+        """With no token configured, the header must not authenticate anything."""
+        with patch("dagster_authkit.core.middleware.log_login_attempt") as mock_audit:
+            scope, sent_messages = await self._run(
+                [(b"dagster-cloud-api-token", self.TOKEN.encode())], token=None
+            )
+
+        assert scope is None
+        assert sent_messages[0]["status"] == 401
+        mock_audit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_viewer_token_denied_mutation(self):
+        """A VIEWER token should go through RBAC and be denied mutations."""
+        with patch("dagster_authkit.core.middleware.log_access_control") as mock_audit:
+            scope, sent_messages = await self._run(
+                [(b"dagster-cloud-api-token", self.TOKEN.encode())],
+                body={"query": "mutation { launchPipelineExecution(executionParams: {}) { __typename } }"},
+            )
+
+        assert scope is None
+        payload = json.loads(sent_messages[1]["body"])
+        assert "Access Denied" in payload["errors"][0]["message"]
+        assert mock_audit.call_args.args[0] == "service-token"
+
+    @pytest.mark.asyncio
+    async def test_session_cookie_takes_precedence(self):
+        """A valid session should win over the token header."""
+        from dagster_authkit.auth.session import sessions
+
+        with patch.object(sessions, "validate", return_value={"username": "admin", "role": 40}):
+            scope, _ = await self._run(
+                [
+                    (b"cookie", b"dagster_session=valid-token"),
+                    (b"dagster-cloud-api-token", self.TOKEN.encode()),
+                ]
+            )
+
+        assert scope is not None
+        assert scope["state"].user.username == "admin"
+
+    @pytest.mark.asyncio
+    async def test_websocket_ignores_token(self):
+        """WebSocket connections stay cookie-only."""
+        app_called = False
+        sent_messages = []
+
+        async def mock_app(scope, receive, send):
+            nonlocal app_called
+            app_called = True
+
+        async def send_fn(message):
+            sent_messages.append(message)
+
+        middleware = DagsterAuthMiddleware(mock_app)
+        scope = {
+            "type": "websocket",
+            "path": "/graphql",
+            "headers": [(b"dagster-cloud-api-token", self.TOKEN.encode())],
+            "query_string": b"",
+        }
+
+        with patch.object(config, "DAGSTER_AUTH_SERVICE_TOKEN", self.TOKEN):
+            await middleware._handle_websocket(scope, None, send_fn)
+
+        assert not app_called
+        assert sent_messages[0]["code"] == 4001
 
 
 # ---------------------------------------------------------------------------
