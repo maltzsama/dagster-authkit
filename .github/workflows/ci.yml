@@ -3,6 +3,9 @@ name: CI
 on:
   workflow_call:
 
+  push:
+    branches: [main, 'release/*']
+
   pull_request:
     branches: [main, develop, 'release/*']
 
