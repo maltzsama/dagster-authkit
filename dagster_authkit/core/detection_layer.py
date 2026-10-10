@@ -12,7 +12,7 @@ from typing import Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # AuthKit version
-__version__ = "1.1.0"  # x-release-please-version
+__version__ = "1.2.0"  # x-release-please-version
 
 # Compatible Dagster versions (January 2026)
 # CRITICAL: Based on Dagster 1.12.12 (latest stable)

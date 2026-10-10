@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- version list -->
 
+## [1.2.0](https://github.com/maltzsama/dagster-authkit/compare/v1.1.0...v1.2.0) (2026-10-10)
+
+
+### Features
+
+* let the Helm chart configure a Dagster workspace and instance ([9952bf0](https://github.com/maltzsama/dagster-authkit/commit/9952bf0fc0def87112d73278fec36cc92113ca32))
+* let the Helm chart configure a Dagster workspace and instance ([d92f8e1](https://github.com/maltzsama/dagster-authkit/commit/d92f8e1c1ebb6c1a7bb3006aa9931905db8c807a)), closes [#21](https://github.com/maltzsama/dagster-authkit/issues/21)
+* publish a container image to GHCR on release ([2f5a71d](https://github.com/maltzsama/dagster-authkit/commit/2f5a71d41b825d5ff81d292fafaf3bd52bebe48e))
+* publish a container image to GHCR on release ([2817179](https://github.com/maltzsama/dagster-authkit/commit/2817179ce01719b1d3546911fdf5950a2a58f0df)), closes [#20](https://github.com/maltzsama/dagster-authkit/issues/20)
+* publish the Helm chart to GHCR and prepare it for Artifact Hub ([ed29546](https://github.com/maltzsama/dagster-authkit/commit/ed29546c8efd3f1af023ce330a535604f08d7f87))
+* publish the Helm chart to GHCR and prepare it for Artifact Hub ([780e53b](https://github.com/maltzsama/dagster-authkit/commit/780e53b6d09253fe5120471dbc541327d3a898df)), closes [#22](https://github.com/maltzsama/dagster-authkit/issues/22)
+
+
+### Bug Fixes
+
+* correct Helm chart template defects ([dd4c69c](https://github.com/maltzsama/dagster-authkit/commit/dd4c69ce780105ab5c0eee2e24ee5a56ff09da71))
+* correct Helm chart template defects ([2121824](https://github.com/maltzsama/dagster-authkit/commit/212182488ac06fb92c10501717a744c35290df57)), closes [#19](https://github.com/maltzsama/dagster-authkit/issues/19)
+* make the Helm chart start with default values ([06a1eb3](https://github.com/maltzsama/dagster-authkit/commit/06a1eb306960385f3b2e4551e35392d561630b9d))
+* make the Helm chart start with default values ([fdb800c](https://github.com/maltzsama/dagster-authkit/commit/fdb800c4b3d488c1166f82029776f4f6aa3fd553)), closes [#18](https://github.com/maltzsama/dagster-authkit/issues/18)
+
 ## v1.1.0 (2026-10-10)
 
 ### Bug Fixes
