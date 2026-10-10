@@ -1,10 +1,10 @@
 name: Publish Python Package
 
+# Releases are cut manually: run this workflow from `main` (PyPI) or a
+# `release/*` branch (TestPyPI). semantic-release computes the version from
+# every commit since the last tag, so merges can be batched into one release.
 on:
-  push:
-    branches:
-      - main
-      - 'release/*'
+  workflow_dispatch:
 
 permissions:
   contents: write
