@@ -1,7 +1,9 @@
 # Stage 1: Build
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
-ARG EXTRAS=""
+# Extras installed into the image. The default is what the published image
+# ships with; override to build a slimmer one (e.g. --build-arg EXTRAS=sqlite).
+ARG EXTRAS="sqlite,postgresql,mysql,redis,ldap"
 
 WORKDIR /build
 
@@ -33,10 +35,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy installed packages from build stage
 COPY --from=builder /install /usr/local
 
-# Dagster Home configuration (required for webserver to run)
+# Run as an unprivileged user. uid 1000 matches the Helm chart's runAsUser.
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin authkit
+
+# Dagster Home configuration (required for webserver to run).
+# /data is the conventional mount point for the SQLite user database.
 ENV DAGSTER_HOME=/opt/dagster/dagster_home
-RUN mkdir -p $DAGSTER_HOME
-COPY dagster.yml $DAGSTER_HOME/
+RUN mkdir -p $DAGSTER_HOME /data && chown -R authkit:authkit /app /opt/dagster /data
+COPY --chown=authkit:authkit dagster.yml $DAGSTER_HOME/
+
+# Numeric so Kubernetes can verify runAsNonRoot.
+USER 1000
 
 # Expose default Dagster port
 EXPOSE 3000

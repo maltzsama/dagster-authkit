@@ -5,9 +5,9 @@
 replicaCount: 1
 
 image:
-  repository: dagster-authkit
+  repository: ghcr.io/maltzsama/dagster-authkit
   pullPolicy: IfNotPresent
-  tag: ""  # REQUIRED — exact image version (e.g. "v0.4.2"). Chart fails to render if empty.
+  tag: ""  # REQUIRED — exact image version (e.g. "1.2.0"). Chart fails to render if empty.
 
 imagePullSecrets: []
 nameOverride: ""
