@@ -5,6 +5,7 @@ Maintains placeholders for LDAP/OAuth while enabling Peewee SQL and Redis Sessio
 
 import logging
 import os
+import re
 import secrets
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,14 @@ class AuthConfig:
         self.DAGSTER_AUTH_SERVICE_TOKEN_HEADER = (
             os.getenv("DAGSTER_AUTH_SERVICE_TOKEN_HEADER") or "Dagster-Cloud-Api-Token"
         )
+        # Must be an RFC 7230 field-name: anything else can never match a request
+        # header, and non-Latin-1 names make the header lookup raise per request.
+        if not re.fullmatch(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+", self.DAGSTER_AUTH_SERVICE_TOKEN_HEADER):
+            raise ValueError(
+                "Invalid DAGSTER_AUTH_SERVICE_TOKEN_HEADER: "
+                f"{self.DAGSTER_AUTH_SERVICE_TOKEN_HEADER!r}. "
+                "Must be a valid HTTP header name (letters, digits and !#$%&'*+-.^_`|~)."
+            )
         raw_service_role = os.getenv("DAGSTER_AUTH_SERVICE_TOKEN_ROLE", "VIEWER").upper()
         if raw_service_role not in valid_roles:
             raise ValueError(

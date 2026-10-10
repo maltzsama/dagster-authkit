@@ -582,6 +582,20 @@ class TestServiceToken:
         assert sent_messages[0]["status"] == 401
 
     @pytest.mark.asyncio
+    async def test_empty_token_returns_401_and_audits(self):
+        """An empty header value is still a presented (invalid) token, not a missing one."""
+        with patch("dagster_authkit.core.middleware.log_login_attempt") as mock_audit:
+            scope, sent_messages = await self._run(
+                [(b"dagster-cloud-api-token", b"")], method="GET", path="/server_info"
+            )
+
+        assert scope is None
+        assert sent_messages[0]["status"] == 401
+        mock_audit.assert_called_once_with(
+            "service-token", False, "10.0.0.9", "INVALID_SERVICE_TOKEN"
+        )
+
+    @pytest.mark.asyncio
     async def test_header_ignored_when_feature_disabled(self):
         """With no token configured, the header must not authenticate anything."""
         with patch("dagster_authkit.core.middleware.log_login_attempt") as mock_audit:

@@ -352,16 +352,17 @@ class DagsterAuthMiddleware:
 
     @staticmethod
     def _has_service_token_header(request: Request) -> bool:
+        """True if the feature is on and the header was sent, even with an empty value."""
         return bool(
             config.DAGSTER_AUTH_SERVICE_TOKEN
-            and request.headers.get(config.DAGSTER_AUTH_SERVICE_TOKEN_HEADER)
+            and config.DAGSTER_AUTH_SERVICE_TOKEN_HEADER in request.headers
         )
 
     def _get_service_token_user(self, request: Request) -> Optional[AuthUser]:
         """Authenticate a non-interactive client via the static service token."""
         if not self._has_service_token_header(request):
             return None
-        presented = request.headers.get(config.DAGSTER_AUTH_SERVICE_TOKEN_HEADER)
+        presented = request.headers.get(config.DAGSTER_AUTH_SERVICE_TOKEN_HEADER, "")
         username = config.DAGSTER_AUTH_SERVICE_TOKEN_USER
         if not SecurityHardening.constant_time_compare(
             presented, config.DAGSTER_AUTH_SERVICE_TOKEN

@@ -288,6 +288,13 @@ class TestAuthConfigServiceToken:
         with pytest.raises(ValueError, match="DAGSTER_AUTH_SERVICE_TOKEN_ROLE"):
             AuthConfig()
 
+    @pytest.mark.parametrize("header", ["X-Tökén", "X Api Token", "X-Token:", "X-Token\r\nEvil"])
+    def test_invalid_header_name_raises(self, monkeypatch, header):
+        """Header names that are not valid HTTP field-names should fail at startup."""
+        monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN_HEADER", header)
+        with pytest.raises(ValueError, match="DAGSTER_AUTH_SERVICE_TOKEN_HEADER"):
+            AuthConfig()
+
     def test_elevated_role_logs_warning(self, monkeypatch, caplog):
         """Roles above VIEWER should be flagged at startup."""
         monkeypatch.setenv("DAGSTER_AUTH_SERVICE_TOKEN", self.VALID_TOKEN)
