@@ -9,7 +9,6 @@ data:
   DAGSTER_AUTH_SESSION_MAX_AGE: {{ .Values.authkit.sessionMaxAge | quote }}
   DAGSTER_AUTH_COOKIE_SECURE: {{ .Values.authkit.cookieSecure | quote }}
   DAGSTER_AUTH_COOKIE_SAMESITE: {{ .Values.authkit.cookieSameSite | quote }}
-  DAGSTER_AUTH_DATABASE_URL: {{ .Values.authkit.databaseUrl | quote }}
   DAGSTER_AUTH_LOG_LEVEL: {{ .Values.authkit.logLevel | quote }}
   DAGSTER_AUTH_AUDIT_LOG: {{ .Values.authkit.auditLog | quote }}
   DAGSTER_AUTH_RATE_LIMIT: {{ .Values.authkit.rateLimit.enabled | quote }}
@@ -29,14 +28,22 @@ data:
   DAGSTER_AUTH_PROXY_TRUST_ALL: {{ .Values.authkit.proxy.trustAll | quote }}
   DAGSTER_AUTH_LDAP_USE_TLS: {{ .Values.authkit.ldap.useTLS | quote }}
   DAGSTER_AUTH_LDAP_TIMEOUT: {{ .Values.authkit.ldap.timeout | quote }}
-  {{- if .Values.authkit.redisUrl }}
-  DAGSTER_AUTH_REDIS_URL: {{ .Values.authkit.redisUrl | quote }}
-  {{- end }}
   DAGSTER_AUTH_SERVICE_TOKEN_HEADER: {{ .Values.authkit.serviceToken.header | quote }}
   DAGSTER_AUTH_SERVICE_TOKEN_ROLE: {{ .Values.authkit.serviceToken.role | quote }}
   DAGSTER_AUTH_SERVICE_TOKEN_USER: {{ .Values.authkit.serviceToken.user | quote }}
+  {{- if .Values.authkit.existingSecret }}
+  # These may carry credentials and normally live in the chart-managed Secret.
+  # With existingSecret the chart cannot write there, so values set here are
+  # rendered in plain text; leave them empty and provide the keys in the Secret.
+  {{- if .Values.authkit.databaseUrl }}
+  DAGSTER_AUTH_DATABASE_URL: {{ .Values.authkit.databaseUrl | quote }}
+  {{- end }}
+  {{- if .Values.authkit.redisUrl }}
+  DAGSTER_AUTH_REDIS_URL: {{ .Values.authkit.redisUrl | quote }}
+  {{- end }}
   {{- if .Values.authkit.metricsToken }}
   DAGSTER_AUTH_METRICS_TOKEN: {{ .Values.authkit.metricsToken | quote }}
+  {{- end }}
   {{- end }}
   {{- if .Values.authkit.proxy.trustedIPs }}
   DAGSTER_AUTH_PROXY_TRUSTED_IPS: {{ .Values.authkit.proxy.trustedIPs | quote }}

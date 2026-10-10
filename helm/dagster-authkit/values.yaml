@@ -16,7 +16,7 @@ fullnameOverride: ""
 serviceAccount:
   create: true
   annotations: {}
-  name: ""
+  name: ""  # Defaults to the release fullname, or to "default" when create=false
 
 podAnnotations: {}
 podSecurityContext:
@@ -46,6 +46,16 @@ ingress:
           pathType: Prefix
   tls: []
 
+# Deployment strategy. When empty, defaults to Recreate if persistence is
+# enabled (ReadWriteOnce volume) and to the Kubernetes default otherwise.
+strategy: {}
+
+# Time allowed for the webserver to start before liveness checks begin:
+# periodSeconds * failureThreshold.
+startupProbe:
+  periodSeconds: 5
+  failureThreshold: 60
+
 resources: {}
 autoscaling:
   enabled: false
@@ -61,7 +71,13 @@ affinity: {}
 
 authkit:
   backend: sql
-  existingSecret: ""  # Name of pre-created Secret (Vault, External Secrets, etc.)
+  # Name of a pre-created Secret (Vault, External Secrets, etc.). It must hold
+  # DAGSTER_AUTH_SECRET_KEY and may hold DAGSTER_AUTH_ADMIN_PASSWORD,
+  # DAGSTER_AUTH_DATABASE_URL, DAGSTER_AUTH_REDIS_URL, DAGSTER_AUTH_METRICS_TOKEN,
+  # DAGSTER_AUTH_SERVICE_TOKEN and DAGSTER_AUTH_LDAP_BIND_PASSWORD. Its keys
+  # override anything set below. To keep credentials out of the ConfigMap, set
+  # databaseUrl, redisUrl and metricsToken to "" and provide them in the Secret.
+  existingSecret: ""
   secretKey: ""  # Used only if existingSecret is empty
   adminPassword: ""
   metricsToken: ""  # Optional — if set, required to access /auth/metrics
