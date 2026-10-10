@@ -1,0 +1,14 @@
+replicaCount: 2
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+persistence:
+  enabled: false
+authkit:
+  databaseUrl: postgresql://dagster:password@postgres:5432/dagster_auth
+  redisUrl: redis://:password@redis:6379/0
+  metricsToken: metrics-token
+  serviceToken:
+    token: service-token-0123456789abcdef0123456789
+    role: LAUNCHER

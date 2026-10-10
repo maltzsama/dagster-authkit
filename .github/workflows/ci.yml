@@ -92,3 +92,39 @@ jobs:
           docker logs authkit
           exit 1
 
+  chart:
+    name: Helm chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: azure/setup-helm@v4
+
+      - uses: helm/chart-testing-action@v2
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+
+      - name: Lint and render
+        run: make helm-check
+
+      - name: Lint (chart-testing)
+        run: ct lint --config ct.yaml
+
+      - name: Build image
+        run: docker build -t dagster-authkit:ci .
+
+      - uses: helm/kind-action@v1
+
+      - name: Load image into kind
+        run: kind load docker-image dagster-authkit:ci --name chart-testing
+
+      # Installs the chart once per ci/*-values.yaml and runs `helm test`.
+      - name: Install and test
+        run: ct install --config ct.yaml
+

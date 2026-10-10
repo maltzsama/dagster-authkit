@@ -1,0 +1,9 @@
+image:
+  repository: dagster-authkit
+  tag: ci
+authkit:
+  secretKey: ci-secret-key-0123456789abcdef
+persistence:
+  enabled: false
+serviceAccount:
+  create: false

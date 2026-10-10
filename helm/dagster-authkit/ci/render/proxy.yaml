@@ -1,0 +1,6 @@
+authkit:
+  backend: proxy
+  proxy:
+    trustedIPs: "10.0.0.1,10.0.0.2"
+    logoutUrl: https://auth.example.com/logout
+    groupPattern: "cn=dagster-{role},ou=groups,dc=example,dc=com"

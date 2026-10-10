@@ -3,7 +3,7 @@
 # Professional development workflow automation
 # =============================================================================
 
-.PHONY: help clean install dev test lint format build publish venv venv-activate venv-deactivate check-venv
+.PHONY: help clean install dev test lint format build publish venv venv-activate venv-deactivate check-venv helm-check
 
 # Default target - shows available commands
 help:
@@ -24,6 +24,7 @@ help:
 	@echo "  make lint              Check code quality"
 	@echo "  make format            Auto-format code"
 	@echo "  make check             Run all checks (lint + test)"
+	@echo "  make helm-check        Lint and render the Helm chart"
 	@echo ""
 	@echo "📚 Database Management:"
 	@echo "  make init-db           Initialize SQLite database with admin"
@@ -164,6 +165,11 @@ clean-all: clean
 	@echo "🧹 Deep cleaning (including venv)..."
 	@rm -rf .venv/ uv.lock 2>/dev/null || true
 	@echo "✅ Deep cleanup complete"
+
+# Lint the Helm chart and render every CI scenario (needs helm; uses
+# kubeconform for schema validation when it is installed)
+helm-check:
+	@.github/scripts/helm-check.sh
 
 # =============================================================================
 # Build & Release

@@ -1,0 +1,9 @@
+authkit:
+  backend: ldap
+  ldap:
+    server: ldaps://ldap.example.com
+    baseDN: dc=example,dc=com
+    bindDN: cn=reader,dc=example,dc=com
+    bindPassword: reader-password
+    useTLS: true
+    groupPattern: "cn=dagster-{role},ou=groups,dc=example,dc=com"
