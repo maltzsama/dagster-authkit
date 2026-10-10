@@ -75,8 +75,7 @@ dev = [
     "twine>=4.0.0",
     "build>=0.10.0", 
     "black>=26.1.0", 
-    "ruff>=0.14.14",
-    "python-semantic-release>=9.0.0"
+    "ruff>=0.14.14"
 ]
 
 # Tool-specific extras (mirror Dagster convention)
@@ -122,19 +121,3 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "TRY400", "LOG007"]
 ignore = ["E501"]
-
-[tool.semantic_release]
-version_variables = [
-    "pyproject.toml:version",
-    "helm/dagster-authkit/Chart.yaml:version",
-    "helm/dagster-authkit/Chart.yaml:appVersion",
-]
-
-[tool.semantic_release.changelog]
-mode = "update"
-insertion_flag = "<!-- version list -->"
-
-[tool.semantic_release.changelog.default_templates]
-changelog_file = "CHANGELOG.md"
-output_format = "md"
-
