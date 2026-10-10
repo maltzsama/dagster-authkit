@@ -3,7 +3,7 @@ name: dagster-authkit
 description: Community authentication wrapper for self-hosted Dagster OSS
 type: application
 version: 1.0.1
-appVersion: "1.0.1"
+appVersion: "1.1.0"
 keywords:
   - dagster
   - authentication

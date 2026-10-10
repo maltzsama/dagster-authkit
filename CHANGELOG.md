@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- version list -->
 
+## v1.1.0 (2026-10-10)
+
+### Bug Fixes
+
+- Harden service token header handling
+  ([`82bc1ed`](https://github.com/maltzsama/dagster-authkit/commit/82bc1ed1ac3f5ae6b72a436dbeea015c4b29a28d))
+
+### Chores
+
+- Readme badges
+  ([`4a61eb4`](https://github.com/maltzsama/dagster-authkit/commit/4a61eb4016b2c0cf04ed72fe4c0b3cb5a103f6e8))
+
+### Features
+
+- Add service token for non-interactive API clients
+  ([`f80fffb`](https://github.com/maltzsama/dagster-authkit/commit/f80fffbb0fd91405ac6f54e97f46a76e4fabfe03))
+
+
 ## v1.0.1 (2026-08-23)
 
 ### Bug Fixes
