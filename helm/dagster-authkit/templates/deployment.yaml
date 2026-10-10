@@ -1,7 +1,5 @@
 {{- if and (contains "sqlite" .Values.authkit.databaseUrl) (or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled) }}
-{{- if not .Values.authkit.redisUrl }}
-{{- fail "SQLite cannot be used with replicaCount > 1 or HPA without Redis. Set authkit.databaseUrl to a PostgreSQL/MySQL DSN, or set replicaCount=1 and disable autoscaling." }}
-{{- end }}
+{{- fail "SQLite cannot be used with replicaCount > 1 or HPA: the database file lives on a single volume and Redis does not share it. Set authkit.databaseUrl to a PostgreSQL/MySQL DSN, or set replicaCount=1 and disable autoscaling." }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -12,6 +10,15 @@ metadata:
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  {{- if .Values.strategy }}
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
+  {{- else if .Values.persistence.enabled }}
+  # A rolling update can deadlock on the ReadWriteOnce data volume: the new
+  # pod waits for a volume the old pod still holds.
+  strategy:
+    type: Recreate
   {{- end }}
   selector:
     matchLabels:
@@ -33,7 +40,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "dagster-authkit.fullname" . }}
+      serviceAccountName: {{ include "dagster-authkit.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
@@ -90,17 +97,21 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /auth/health?type=live
+              port: http
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /auth/health?type=live
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /auth/health?type=ready
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
           resources:
