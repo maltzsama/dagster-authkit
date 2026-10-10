@@ -32,6 +32,9 @@ data:
   {{- if .Values.authkit.redisUrl }}
   DAGSTER_AUTH_REDIS_URL: {{ .Values.authkit.redisUrl | quote }}
   {{- end }}
+  DAGSTER_AUTH_SERVICE_TOKEN_HEADER: {{ .Values.authkit.serviceToken.header | quote }}
+  DAGSTER_AUTH_SERVICE_TOKEN_ROLE: {{ .Values.authkit.serviceToken.role | quote }}
+  DAGSTER_AUTH_SERVICE_TOKEN_USER: {{ .Values.authkit.serviceToken.user | quote }}
   {{- if .Values.authkit.metricsToken }}
   DAGSTER_AUTH_METRICS_TOKEN: {{ .Values.authkit.metricsToken | quote }}
   {{- end }}

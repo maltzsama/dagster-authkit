@@ -32,7 +32,7 @@ from dagster_authkit.auth.security import SecurityHardening
 from dagster_authkit.auth.session import sessions
 from dagster_authkit.core.graphql_analyzer import _SENTINEL_UNPARSEABLE, GraphQLMutationAnalyzer
 from dagster_authkit.core.registry import get_backend
-from dagster_authkit.utils.audit import log_access_control
+from dagster_authkit.utils.audit import log_access_control, log_login_attempt
 from dagster_authkit.utils.config import config
 from dagster_authkit.utils.templates import render_403_page
 
@@ -47,6 +47,10 @@ class DagsterAuthMiddleware:
 
     Handles both HTTP and WebSocket connections. WebSocket GraphQL
     subscriptions at /graphql are authenticated via session cookie.
+
+    In session mode, HTTP requests without a valid session may also
+    authenticate with a static service token (``DAGSTER_AUTH_SERVICE_TOKEN``),
+    intended for non-interactive API clients such as metrics exporters.
     """
 
     PUBLIC_PATHS: frozenset[str] = frozenset(
@@ -198,11 +202,12 @@ class DagsterAuthMiddleware:
                 await response(scope, receive, send)
                 return
         else:
-            user = self._get_authenticated_user(request)
+            user = self._get_authenticated_user(request) or self._get_service_token_user(request)
             if not user:
                 if (
                     path == "/graphql"
                     or request.headers.get("x-requested-with") == "XMLHttpRequest"
+                    or self._has_service_token_header(request)
                 ):
                     response = Response(content="Unauthorized", status_code=401)
                 else:
@@ -344,6 +349,32 @@ class DagsterAuthMiddleware:
         except Exception as e:
             logger.error(f"User deserialization failed: {e}", exc_info=True)
             return None
+
+    @staticmethod
+    def _has_service_token_header(request: Request) -> bool:
+        return bool(
+            config.DAGSTER_AUTH_SERVICE_TOKEN
+            and request.headers.get(config.DAGSTER_AUTH_SERVICE_TOKEN_HEADER)
+        )
+
+    def _get_service_token_user(self, request: Request) -> Optional[AuthUser]:
+        """Authenticate a non-interactive client via the static service token."""
+        if not self._has_service_token_header(request):
+            return None
+        presented = request.headers.get(config.DAGSTER_AUTH_SERVICE_TOKEN_HEADER)
+        username = config.DAGSTER_AUTH_SERVICE_TOKEN_USER
+        if not SecurityHardening.constant_time_compare(
+            presented, config.DAGSTER_AUTH_SERVICE_TOKEN
+        ):
+            ip = request.client.host if request.client else None
+            logger.warning(f"Invalid service token presented from {ip}")
+            log_login_attempt(username, False, ip, "INVALID_SERVICE_TOKEN")
+            return None
+        return AuthUser(
+            username=username,
+            role=Role[config.DAGSTER_AUTH_SERVICE_TOKEN_ROLE],
+            full_name="Service token",
+        )
 
     # ================================================================
     # User extraction (WebSocket scope)

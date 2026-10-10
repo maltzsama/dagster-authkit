@@ -63,6 +63,13 @@ class AuthConfig:
             ``DAGSTER_AUTH_UNKNOWN_MUTATION_ROLE`` Default: ``ADMIN`` — deny-by-default
             ``DAGSTER_AUTH_REST_WRITE_ROLE``       Default: ``EDITOR``
 
+        **Service token (non-interactive API clients, session backends only):**
+            ``DAGSTER_AUTH_SERVICE_TOKEN``         Optional shared secret (min 32 chars).
+                                                   Feature is off when unset.
+            ``DAGSTER_AUTH_SERVICE_TOKEN_HEADER``  Default: ``Dagster-Cloud-Api-Token``
+            ``DAGSTER_AUTH_SERVICE_TOKEN_ROLE``    Default: ``VIEWER``
+            ``DAGSTER_AUTH_SERVICE_TOKEN_USER``    Default: ``service-token`` (audit log name)
+
         **Bootstrap:**
             ``DAGSTER_AUTH_ADMIN_USER``            Default: ``admin``. Admin username
             ``DAGSTER_AUTH_ADMIN_PASSWORD``        Auto-creates admin on first run
@@ -197,6 +204,25 @@ class AuthConfig:
             )
         self.DAGSTER_AUTH_REST_WRITE_ROLE = raw_rest_role
 
+        # Service token: static shared secret for non-interactive API clients
+        # (e.g. Prometheus exporters) that cannot go through the login form.
+        # Disabled when unset. The header default matches Dagster+ so clients
+        # that already send DAGSTER_CLOUD_API_TOKEN work without changes.
+        self.DAGSTER_AUTH_SERVICE_TOKEN = os.getenv("DAGSTER_AUTH_SERVICE_TOKEN") or None
+        self.DAGSTER_AUTH_SERVICE_TOKEN_HEADER = (
+            os.getenv("DAGSTER_AUTH_SERVICE_TOKEN_HEADER") or "Dagster-Cloud-Api-Token"
+        )
+        raw_service_role = os.getenv("DAGSTER_AUTH_SERVICE_TOKEN_ROLE", "VIEWER").upper()
+        if raw_service_role not in valid_roles:
+            raise ValueError(
+                f"Invalid DAGSTER_AUTH_SERVICE_TOKEN_ROLE: {raw_service_role}. "
+                f"Must be one of: {', '.join(sorted(valid_roles))}"
+            )
+        self.DAGSTER_AUTH_SERVICE_TOKEN_ROLE = raw_service_role
+        self.DAGSTER_AUTH_SERVICE_TOKEN_USER = (
+            os.getenv("DAGSTER_AUTH_SERVICE_TOKEN_USER") or "service-token"
+        )
+
         # Admin Bootstrap (Used by SQL Backend)
         self.ADMIN_USER = os.getenv("DAGSTER_AUTH_ADMIN_USER", "admin")
         self.ADMIN_PASSWORD = os.getenv("DAGSTER_AUTH_ADMIN_PASSWORD", "")
@@ -233,6 +259,23 @@ class AuthConfig:
 
         if len(self.SECRET_KEY) < 16:
             raise ValueError("SECRET_KEY must be at least 16 characters")
+
+        if self.DAGSTER_AUTH_SERVICE_TOKEN:
+            if len(self.DAGSTER_AUTH_SERVICE_TOKEN) < 32:
+                raise ValueError(
+                    "DAGSTER_AUTH_SERVICE_TOKEN must be at least 32 characters.\n"
+                    "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+            if self.AUTH_BACKEND == "proxy":
+                logger.warning(
+                    "DAGSTER_AUTH_SERVICE_TOKEN is ignored when DAGSTER_AUTH_BACKEND=proxy."
+                )
+            elif self.DAGSTER_AUTH_SERVICE_TOKEN_ROLE != "VIEWER":
+                logger.warning(
+                    "Service token grants %s role. It is a static, non-expiring credential; "
+                    "prefer VIEWER unless the client needs to run mutations.",
+                    self.DAGSTER_AUTH_SERVICE_TOKEN_ROLE,
+                )
 
         if self.REDIS_URL:
             if not self.REDIS_URL.startswith(("redis://", "rediss://")):

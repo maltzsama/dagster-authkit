@@ -66,6 +66,14 @@ authkit:
   adminPassword: ""
   metricsToken: ""  # Optional — if set, required to access /auth/metrics
 
+  # Static token for non-interactive API clients (e.g. Prometheus exporters).
+  # Session backends only. With existingSecret, provide DAGSTER_AUTH_SERVICE_TOKEN there.
+  serviceToken:
+    token: ""  # Optional — min 32 chars; feature is off when empty
+    header: Dagster-Cloud-Api-Token
+    role: VIEWER
+    user: service-token
+
   sessionMaxAge: 86400
   cookieSecure: true
   cookieSameSite: lax
