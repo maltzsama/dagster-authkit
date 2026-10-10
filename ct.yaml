@@ -1,0 +1,9 @@
+# chart-testing configuration (https://github.com/helm/chart-testing)
+charts:
+  - helm/dagster-authkit
+target-branch: main
+# The chart version is bumped by release-please, not in feature PRs.
+check-version-increment: false
+# Maintainer names are not GitHub handles.
+validate-maintainers: false
+helm-extra-args: --timeout 180s

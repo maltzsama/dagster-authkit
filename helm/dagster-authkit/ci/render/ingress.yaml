@@ -1,0 +1,23 @@
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: dagster.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: dagster-tls
+      hosts:
+        - dagster.example.com
+serviceAccount:
+  create: false
+  name: existing-sa
+strategy:
+  type: RollingUpdate
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
