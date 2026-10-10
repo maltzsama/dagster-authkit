@@ -73,6 +73,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Build image
         run: docker build -t dagster-authkit:ci .
@@ -100,6 +102,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: azure/setup-helm@v4
 
