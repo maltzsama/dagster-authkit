@@ -28,3 +28,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/name: {{ include "dagster-authkit.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{- define "dagster-authkit.image" -}}
+{{ .Values.image.repository }}:{{ required "image.tag is required — set the exact image version (e.g. --set image.tag=v0.4.2). Falling back to Chart.appVersion would silently use a stale version." .Values.image.tag }}
+{{- end }}
