@@ -4,6 +4,10 @@ description: Community authentication wrapper for self-hosted Dagster OSS
 type: application
 version: 1.1.0  # x-release-please-version
 appVersion: "1.1.0"  # x-release-please-version
+kubeVersion: ">=1.23.0-0"
+home: https://github.com/maltzsama/dagster-authkit
+sources:
+  - https://github.com/maltzsama/dagster-authkit
 keywords:
   - dagster
   - authentication
@@ -13,4 +17,13 @@ keywords:
 maintainers:
   - name: Demetrius Albuquerque
     email: demetrius.albuquerque@yahoo.com.br
-icon: https://raw.githubusercontent.com/maltzsama/dagster-authkit/main/docs/assets/icon.png
+icon: https://maltzsama.github.io/dagster-authkit/assets/icon.svg
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://maltzsama.github.io/dagster-authkit/
+    - name: PyPI
+      url: https://pypi.org/project/dagster-authkit/
+    - name: Changelog
+      url: https://github.com/maltzsama/dagster-authkit/blob/main/CHANGELOG.md

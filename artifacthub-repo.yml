@@ -1,0 +1,10 @@
+# Artifact Hub repository metadata (https://artifacthub.io/docs/topics/repositories/).
+# The release workflow pushes this file to the `artifacthub.io` tag of the chart's
+# OCI repository, which is how Artifact Hub verifies ownership.
+#
+# After registering the repository on artifacthub.io, add its ID here to get the
+# "Verified publisher" badge:
+# repositoryID: 00000000-0000-0000-0000-000000000000
+owners:
+  - name: Demetrius Albuquerque
+    email: demetrius.albuquerque@yahoo.com.br

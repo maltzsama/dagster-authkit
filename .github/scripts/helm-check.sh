@@ -39,6 +39,8 @@ expect_failure() {
 
 expect_failure "two workspace sources" --set dagster.workspace.module=my.module --set dagster.workspace.content=load_from:
 expect_failure "missing secretKey" --set authkit.secretKey=
+expect_failure "unknown backend (values schema)" --set authkit.backend=saml
+expect_failure "unknown role (values schema)" --set authkit.rbac.restWriteRole=OWNER
 expect_failure "SQLite with several replicas" --set replicaCount=3
 expect_failure "SQLite with several replicas and Redis" --set replicaCount=3 --set authkit.redisUrl=redis://redis:6379
 expect_failure "SQLite with autoscaling" --set autoscaling.enabled=true

@@ -159,15 +159,15 @@ dagster-authkit -f your_pipeline.py -h 0.0.0.0 -p 3000
 
 ### ☸️ Helm (Kubernetes)
 
-Deploy on Kubernetes via the Helm chart in [`helm/dagster-authkit/`](./helm/dagster-authkit/):
+The chart is published as an OCI artifact on GHCR, together with the container image:
 
 ```bash
-helm upgrade --install dagster-authkit ./helm/dagster-authkit \
+helm upgrade --install dagster-authkit oci://ghcr.io/maltzsama/charts/dagster-authkit \
   --set authkit.secretKey="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
   --set authkit.adminPassword="your-admin-password"
 ```
 
-See [`values.yaml`](./helm/dagster-authkit/values.yaml) for all configuration options.
+See the [chart README](./helm/dagster-authkit/README.md) for configuration and examples.
 
 ---
 
