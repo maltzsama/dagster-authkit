@@ -127,9 +127,14 @@ class RedisBackend(SessionBackend):
     def revoke_all(self, username: str) -> int:
         key = f"user_sess:{username}"
         tokens = self.client.smembers(key)
-        for t in tokens:
-            self.client.delete(f"sess:{t}")
-        return self.client.delete(key)
+        if not tokens:
+            return 0
+        self.client.delete(*[f"sess:{t}" for t in tokens])
+        # Remove only the tokens revoked above instead of deleting the whole
+        # index: a session created concurrently (after SMEMBERS) must stay
+        # tracked, otherwise no later revoke_all could ever reach it.
+        self.client.srem(key, *tokens)
+        return len(tokens)
 
 
 class CookieBackend(SessionBackend):
