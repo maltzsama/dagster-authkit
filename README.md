@@ -33,10 +33,10 @@ Dagster OSS has no auth. If you run it in a VPC or locally, anyone with the URL 
 ## ✨ What's New in v1.0.0
 
 ### ☸️ Helm Chart
-- **Production-ready Kubernetes chart** under `helm/dagster-authkit/`, synced with the application's config (env vars, secrets, image tag) and versioned automatically by semantic-release. Requires an explicit `image.tag`.
+- **Production-ready Kubernetes chart** under `helm/dagster-authkit/`, synced with the application's config (env vars, secrets, image tag) and versioned automatically on each release. Requires an explicit `image.tag`.
 
 ### 🔄 Automated CHANGELOG
-- **`CHANGELOG.md` is now auto-generated** by semantic-release on each release, alongside the version bump. Versions are inserted above the `<!-- version list -->` marker.
+- **`CHANGELOG.md` is now auto-generated** on each release, alongside the version bump.
 - **RBAC deny-by-default** — unknown GraphQL mutations require `ADMIN` by default.
 
 ### 🔐 Hardening & Fixes

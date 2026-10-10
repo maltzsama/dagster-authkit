@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from dagster_authkit.core import detection_layer
 from dagster_authkit.core.detection_layer import (
     check_and_exit_if_incompatible,
     get_compatibility_report,
@@ -152,7 +153,7 @@ class TestGetCompatibilityReport:
             ws_cls.build_routes = MagicMock()
 
             report = get_compatibility_report()
-        assert "0.4.0" in report
+        assert detection_layer.__version__ in report
 
 
 # ── print_compatibility_warning ───────────────────────────────────────────

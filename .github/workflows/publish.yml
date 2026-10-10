@@ -1,34 +1,54 @@
-name: Publish Python Package
+name: Release
 
-# Releases are cut manually: run this workflow from `main` (PyPI) or a
-# `release/*` branch (TestPyPI). semantic-release computes the version from
-# every commit since the last tag, so merges can be batched into one release.
+# release-please keeps a release PR open on `main`, updated on every push with
+# the next version and changelog. Merging that PR creates the tag and GitHub
+# release, and only then do the publish jobs below run.
+#
+# The file name and the `release` environment are part of the PyPI trusted
+# publisher configuration: do not rename either.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+
   test:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
-  release:
-    if: github.ref_name == 'main' || startsWith(github.ref_name, 'release/')
+  pypi:
+    name: Publish to PyPI
+    needs: [release-please, test]
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
-    needs: test
     environment:
-      name: ${{ startsWith(github.ref_name, 'main') && 'release' || 'test-release' }}
-    outputs:
-      released: ${{ steps.post.outputs.released }}
-      tag: ${{ steps.post.outputs.tag }}
+      name: release
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -37,50 +57,18 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Install dependencies
-        run: uv pip install --system python-semantic-release
-
-      - name: Record pre-release tag
-        id: pre
-        run: echo "tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
-
-      - name: Create version with semantic-release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version
-
-      - name: Check if a release occurred
-        id: post
-        run: |
-          before="${{ steps.pre.outputs.tag }}"
-          after=$(git describe --tags --abbrev=0)
-          echo "tag=$after" >> "$GITHUB_OUTPUT"
-          if [ "$before" != "$after" ]; then
-            echo "released=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "released=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build package
-        if: steps.post.outputs.released == 'true'
         run: uv build
 
-      - name: Publish to TestPyPI (Trusted Publisher)
-        if: steps.post.outputs.released == 'true' && startsWith(github.ref_name, 'release/')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
       - name: Publish to PyPI (Trusted Publisher)
-        if: steps.post.outputs.released == 'true' && github.ref_name == 'main'
         uses: pypa/gh-action-pypi-publish@release/v1
 
   # Publishes ghcr.io/<owner>/dagster-authkit for the version just released.
   # A separate job so it can be re-run on its own if the push fails.
   image:
     name: Publish container image
-    if: needs.release.outputs.released == 'true' && github.ref_name == 'main'
-    needs: release
+    needs: [release-please, test]
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -89,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release.outputs.tag }}
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - uses: docker/setup-qemu-action@v3
 
@@ -109,8 +97,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.release.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.tag }}
+            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
