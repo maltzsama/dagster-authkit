@@ -33,7 +33,7 @@ Dagster OSS has no auth. If you run it in a VPC or locally, anyone with the URL 
 ## ✨ What's New in v1.0.0
 
 ### ☸️ Helm Chart
-- **Production-ready Kubernetes chart** under `helm/dagster-authkit/`, synced with the application's config (env vars, secrets, image tag) and versioned automatically on each release. Requires an explicit `image.tag`.
+- **Production-ready Kubernetes chart** under `helm/dagster-authkit/`, synced with the application's config (env vars, secrets, image tag) and versioned automatically on each release.
 
 ### 🔄 Automated CHANGELOG
 - **`CHANGELOG.md` is now auto-generated** on each release, alongside the version bump.
@@ -163,7 +163,6 @@ Deploy on Kubernetes via the Helm chart in [`helm/dagster-authkit/`](./helm/dags
 
 ```bash
 helm upgrade --install dagster-authkit ./helm/dagster-authkit \
-  --set image.tag="$(git describe --tags --abbrev=0 | sed 's/^v//')" \
   --set authkit.secretKey="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
   --set authkit.adminPassword="your-admin-password"
 ```

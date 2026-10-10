@@ -1,0 +1,23 @@
+{{- if and .Values.dagster.workspace.content (not .Values.dagster.workspace.existingConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dagster-authkit.fullname" . }}-workspace
+  labels:
+    {{- include "dagster-authkit.labels" . | nindent 4 }}
+data:
+  workspace.yaml: |
+    {{- .Values.dagster.workspace.content | nindent 4 }}
+{{- end }}
+{{- if and .Values.dagster.instance.content (not .Values.dagster.instance.existingConfigMap) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dagster-authkit.fullname" . }}-instance
+  labels:
+    {{- include "dagster-authkit.labels" . | nindent 4 }}
+data:
+  dagster.yaml: |
+    {{- .Values.dagster.instance.content | nindent 4 }}
+{{- end }}

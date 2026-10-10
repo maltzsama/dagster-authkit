@@ -30,7 +30,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "dagster-authkit.image" -}}
-{{ .Values.image.repository }}:{{ required "image.tag is required — set the exact image version (e.g. --set image.tag=1.2.0). Falling back to Chart.appVersion would silently use a stale version." .Values.image.tag }}
+{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
 {{- end }}
 
 {{- define "dagster-authkit.serviceAccountName" -}}
@@ -38,5 +38,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default (include "dagster-authkit.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{- define "dagster-authkit.workspaceConfigMap" -}}
+{{- if .Values.dagster.workspace.existingConfigMap }}
+{{- .Values.dagster.workspace.existingConfigMap }}
+{{- else if .Values.dagster.workspace.content }}
+{{- include "dagster-authkit.fullname" . }}-workspace
+{{- end }}
+{{- end }}
+
+{{- define "dagster-authkit.instanceConfigMap" -}}
+{{- if .Values.dagster.instance.existingConfigMap }}
+{{- .Values.dagster.instance.existingConfigMap }}
+{{- else if .Values.dagster.instance.content }}
+{{- include "dagster-authkit.fullname" . }}-instance
 {{- end }}
 {{- end }}

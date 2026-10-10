@@ -37,7 +37,7 @@ expect_failure() {
   echo "==> refused as expected: $name"
 }
 
-expect_failure "missing image.tag" --set image.tag=
+expect_failure "two workspace sources" --set dagster.workspace.module=my.module --set dagster.workspace.content=load_from:
 expect_failure "missing secretKey" --set authkit.secretKey=
 expect_failure "SQLite with several replicas" --set replicaCount=3
 expect_failure "SQLite with several replicas and Redis" --set replicaCount=3 --set authkit.redisUrl=redis://redis:6379
