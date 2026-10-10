@@ -66,3 +66,29 @@ jobs:
             .pytest_cache/
             coverage.xml
           retention-days: 7
+
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t dagster-authkit:ci .
+
+      - name: Smoke test
+        run: |
+          docker run -d --name authkit -p 3000:3000 \
+            -e DAGSTER_AUTH_SECRET_KEY=ci-secret-key-0123456789abcdef \
+            -e DAGSTER_AUTH_ADMIN_PASSWORD=ci-admin-password \
+            dagster-authkit:ci -h 0.0.0.0 -p 3000 --empty-workspace
+          for i in $(seq 1 30); do
+            if curl -fsS "http://localhost:3000/auth/health?type=ready"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs authkit
+          exit 1
+

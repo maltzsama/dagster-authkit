@@ -1,0 +1,23 @@
+# Keep the build context to what `pip install .` and the image need.
+.git/
+.github/
+.claude/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+site/
+docs/
+examples/
+helm/
+tests/
+*.db
